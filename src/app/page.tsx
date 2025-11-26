@@ -58,20 +58,7 @@ export default function HomePage() {
         </motion.div>
       </div>
       
-      <div className="fixed top-4 right-4 flex gap-2">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/auth?mode=signin')}
-        >
-          Sign In
-        </Button>
-        
-        <Button
-          onClick={() => router.push('/auth?mode=signup')}
-        >
-          Sign Up
-        </Button>
-      </div>
+      
     </div>
   );
 }

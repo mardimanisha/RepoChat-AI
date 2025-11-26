@@ -74,7 +74,7 @@ export function Sidebar({
         )}
       </div>
       
-      <Separator />
+    
       
       <div className="flex-1 overflow-y-auto p-2">
         {chats.map((chat) => (
