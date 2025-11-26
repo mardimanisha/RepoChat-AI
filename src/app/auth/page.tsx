@@ -18,7 +18,7 @@ export default function AuthPage() {
   const searchParams = useSearchParams();
   // Note: useSearchParams() can be null during SSR, but in client components it's safe
   // The optional chaining handles null gracefully
-  const modeParam = searchParams?.get('mode');
+  const modeParam = searchParams.get('mode');
   const mode = modeParam === 'signup' ? 'signup' : 'signin';
   
   const [isSignUp, setIsSignUp] = useState(mode === 'signup');
