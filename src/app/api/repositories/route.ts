@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const hfToken = process.env.HF_TOKEN;
-    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    const geminiApiKey = process.env.GOOGLE_AI_API_KEY;
     const githubToken = process.env.GITHUB_TOKEN;
 
     if (!supabaseUrl || !supabaseKey) {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
         supabaseUrl,
         supabaseKey,
         hfToken,
-        anthropicApiKey,
+        geminiApiKey,
         githubToken,
       });
 

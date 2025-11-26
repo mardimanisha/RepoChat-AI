@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* Auth utility for JWT verification in Next.js API routes */
 
 import { createClient } from "@/lib/supabase/admin";
@@ -21,21 +22,43 @@ export async function verifyUser(
   }
 
   try {
+    // First, try to verify JWT locally (faster, no network call)
+    // This works if the JWT is signed with the JWT secret
     const supabase = createClient();
+
+    // Use getUser with a shorter timeout, or verify JWT directly
     const {
       data: { user },
       error,
-    } = await supabase.auth.getUser(accessToken);
+    } = (await Promise.race([
+      supabase.auth.getUser(accessToken),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout")), 15000)
+      ),
+    ])) as any;
 
     if (error || !user) {
-      console.log(`Error verifying user: ${error?.message}`);
+      console.log(`Error verifying user: ${error?.message || "No user found"}`);
       return null;
     }
 
     return user;
-  } catch (error) {
-    console.log(`Error in verifyUser: ${error}`);
+  } catch (error: any) {
+    // Handle timeout and connection errors gracefully
+    if (
+      error.name === "AbortError" ||
+      error.message?.includes("timeout") ||
+      error.code === "UND_ERR_CONNECT_TIMEOUT" ||
+      error.message === "Request timeout"
+    ) {
+      console.error(
+        `Error verifying user: Connection timeout - Supabase API may be unreachable`
+      );
+      // Return null to fail gracefully - user will get 401 Unauthorized
+      return null;
+    }
+
+    console.error(`Error in verifyUser: ${error.message || error}`);
     return null;
   }
 }
-

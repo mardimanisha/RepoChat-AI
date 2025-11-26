@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Embeddings module for generating vector embeddings using Hugging Face
  * Model: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions)
  */
 
-import { HuggingFaceInferenceEmbeddings } from '@langchain/community/embeddings/hf';
+import { HuggingFaceInferenceEmbeddings } from "@langchain/community/embeddings/hf";
 
-const EMBEDDING_MODEL = 'sentence-transformers/all-MiniLM-L6-v2';
+const EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2";
 const EMBEDDING_DIMENSION = 384;
 
 /**
@@ -14,21 +13,21 @@ const EMBEDDING_DIMENSION = 384;
  * @param hfToken - Hugging Face API token
  * @returns HuggingFaceInferenceEmbeddings instance
  */
-export function getEmbeddings(hfToken?: string): HuggingFaceInferenceEmbeddings {
-  // Support both Node.js and Deno environments
+export function getEmbeddings(
+  hfToken?: string
+): HuggingFaceInferenceEmbeddings {
+  // Get token from parameter or environment variable
   let token = hfToken;
   if (!token) {
-    if (typeof process !== 'undefined' && process.env) {
+    if (typeof process !== "undefined" && process.env) {
       token = process.env.HF_TOKEN;
-    } else if (typeof Deno !== 'undefined' && Deno.env) {
-      token = Deno.env.get('HF_TOKEN');
     }
   }
-  
+
   if (!token) {
-    throw new Error('HF_TOKEN environment variable is required for embeddings');
+    throw new Error("HF_TOKEN environment variable is required for embeddings");
   }
-  
+
   return new HuggingFaceInferenceEmbeddings({
     apiKey: token,
     model: EMBEDDING_MODEL,
@@ -48,18 +47,22 @@ export async function embedQuery(
   try {
     const embeddings = getEmbeddings(hfToken);
     const vector = await embeddings.embedQuery(text);
-    
+
     // Validate dimension
     if (vector.length !== EMBEDDING_DIMENSION) {
       throw new Error(
         `Expected embedding dimension ${EMBEDDING_DIMENSION}, got ${vector.length}`
       );
     }
-    
+
     return vector;
   } catch (error) {
-    console.error('Error generating query embedding:', error);
-    throw new Error(`Failed to generate embedding: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error("Error generating query embedding:", error);
+    throw new Error(
+      `Failed to generate embedding: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 }
 
@@ -77,10 +80,10 @@ export async function embedDocuments(
     if (texts.length === 0) {
       return [];
     }
-    
+
     const embeddings = getEmbeddings(hfToken);
     const vectors = await embeddings.embedDocuments(texts);
-    
+
     // Validate dimensions
     for (let i = 0; i < vectors.length; i++) {
       if (vectors[i].length !== EMBEDDING_DIMENSION) {
@@ -89,11 +92,15 @@ export async function embedDocuments(
         );
       }
     }
-    
+
     return vectors;
   } catch (error) {
-    console.error('Error generating document embeddings:', error);
-    throw new Error(`Failed to generate document embeddings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error("Error generating document embeddings:", error);
+    throw new Error(
+      `Failed to generate document embeddings: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 }
 
@@ -112,4 +119,3 @@ export function getEmbeddingDimension(): number {
 export function getEmbeddingModel(): string {
   return EMBEDDING_MODEL;
 }
-

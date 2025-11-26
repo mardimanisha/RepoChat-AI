@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Database operations for messages
  * Replaces KV store operations with Supabase table operations
  */
 
-import { createClient } from '@/lib/supabase/admin';
+import { createClient } from "@/lib/supabase/admin";
 
 export interface Message {
   id: string;
   chatId: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   createdAt: string;
 }
@@ -19,20 +20,20 @@ export interface Message {
 export async function getChatMessages(chatId: string): Promise<Message[]> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('chat_id', chatId)
-    .order('created_at', { ascending: true });
-  
+    .from("messages")
+    .select("*")
+    .eq("chat_id", chatId)
+    .order("created_at", { ascending: true });
+
   if (error) {
     console.error(`[DB] Error fetching messages for chat ${chatId}:`, error);
     return [];
   }
-  
-  return (data || []).map(msg => ({
+
+  return (data || []).map((msg: any) => ({
     id: msg.id,
     chatId: msg.chat_id,
-    role: msg.role as 'user' | 'assistant',
+    role: msg.role as "user" | "assistant",
     content: msg.content,
     createdAt: msg.created_at,
   }));
@@ -41,44 +42,46 @@ export async function getChatMessages(chatId: string): Promise<Message[]> {
 /**
  * Create a new message
  */
-export async function createMessage(message: Omit<Message, 'createdAt'>): Promise<Message> {
+export async function createMessage(
+  message: Omit<Message, "createdAt">
+): Promise<Message> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from('messages')
+    .from("messages")
     .insert({
       id: message.id,
       chat_id: message.chatId,
       role: message.role,
       content: message.content,
-    })
+    } as any)
     .select()
     .single();
-  
+
   if (error) {
     console.error(`[DB] Error creating message:`, error);
     throw new Error(`Failed to create message: ${error.message}`);
   }
-  
+
+  const result = data as any;
   return {
-    id: data.id,
-    chatId: data.chat_id,
-    role: data.role as 'user' | 'assistant',
-    content: data.content,
-    createdAt: data.created_at,
+    id: result.id,
+    chatId: result.chat_id,
+    role: result.role as "user" | "assistant",
+    content: result.content,
+    createdAt: result.created_at,
   };
 }
 
 /**
  * Get chat history for RAG context (last N messages)
  */
-export async function getChatHistory(chatId: string, limit: number = 10): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+export async function getChatHistory(
+  chatId: string,
+  limit: number = 10
+): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
   const messages = await getChatMessages(chatId);
-  return messages
-    .slice(-limit)
-    .map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+  return messages.slice(-limit).map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+  }));
 }
-
-

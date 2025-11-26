@@ -55,33 +55,37 @@ export async function POST(request: NextRequest) {
     // Get chat history for RAG context
     const chatHistory = await dbMessages.getChatHistory(chatId, 10);
 
-    // Generate AI response using RAG
+    // Generate AI response using RAG with Gemini
     let response: string;
     try {
       const supabaseUrl = process.env.SUPABASE_URL;
       const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       const hfToken = process.env.HF_TOKEN;
-      const anthropicApiKey = process.env.ANTHROPIC_API_KEY?.trim();
+      const geminiApiKey = process.env.GOOGLE_AI_API_KEY?.trim(); // Changed from ANTHROPIC_API_KEY
 
       if (!supabaseUrl || !supabaseKey) {
         throw new Error("Missing Supabase configuration");
       }
 
-      if (!anthropicApiKey) {
-        console.error("[API] ANTHROPIC_API_KEY is missing or empty");
-        throw new Error("Anthropic API key is not configured. Please set ANTHROPIC_API_KEY environment variable.");
+      if (!geminiApiKey) {
+        console.error("[API] GOOGLE_AI_API_KEY is missing or empty");
+        throw new Error(
+          "Gemini API key is not configured. Please set GOOGLE_AI_API_KEY environment variable."
+        );
       }
 
       // Log key status for debugging (without exposing the actual key)
-      if (anthropicApiKey.length < 20) {
-        console.warn("[API] ANTHROPIC_API_KEY appears to be too short. Valid keys are typically longer.");
+      if (geminiApiKey.length < 20) {
+        console.warn(
+          "[API] GOOGLE_AI_API_KEY appears to be too short. Valid keys are typically longer."
+        );
       }
 
       const ragClient = createRAGClient({
         supabaseUrl,
         supabaseKey,
         hfToken,
-        anthropicApiKey,
+        geminiApiKey, // Changed from anthropicApiKey
       });
 
       response = await ragClient.queryRepository({
@@ -91,15 +95,23 @@ export async function POST(request: NextRequest) {
       });
     } catch (error: any) {
       console.error(`[RAG] Error generating RAG response: ${error}`);
-      
+
       // Provide more helpful error messages
       let errorMessage = error.message || "Unknown error occurred";
-      if (error.status === 401 || errorMessage.includes("invalid x-api-key") || errorMessage.includes("authentication_error")) {
-        errorMessage = "Anthropic API key is invalid or expired. Please check your ANTHROPIC_API_KEY environment variable.";
+      if (
+        errorMessage.includes("API key") ||
+        errorMessage.includes("authentication")
+      ) {
+        errorMessage =
+          "Gemini API key is invalid or expired. Please check your GOOGLE_AI_API_KEY environment variable.";
       } else if (errorMessage.includes("not configured")) {
-        errorMessage = "Anthropic API key is not configured. Please set the ANTHROPIC_API_KEY environment variable.";
+        errorMessage =
+          "Gemini API key is not configured. Please set the GOOGLE_AI_API_KEY environment variable.";
+      } else if (errorMessage.includes("quota")) {
+        errorMessage =
+          "Gemini API quota exceeded. Please check your usage limits or upgrade your plan.";
       }
-      
+
       response = `I encountered an error while processing your question: ${errorMessage}. Please try again or contact support if the issue persists.`;
     }
 

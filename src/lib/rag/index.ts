@@ -15,4 +15,5 @@ export * from './embeddings.js';
 export * from './github.js';
 export * from './vector-search.js';
 export * from './query.js';
+export * from './text-generation.js';
 
