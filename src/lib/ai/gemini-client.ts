@@ -45,7 +45,7 @@ export class GeminiClient {
       const config: any = {
         systemInstruction: params.system || undefined,
         temperature: params.temperature || 0.7,
-        maxOutputTokens: params.maxTokens || 1024,
+        maxOutputTokens: params.maxTokens || 2048,
       };
 
       const response = await this.client.models.generateContent({

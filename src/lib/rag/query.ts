@@ -6,18 +6,18 @@ import * as embeddingsModule from "./embeddings";
 import * as githubModule from "./github";
 import * as vectorSearchModule from "./vector-search";
 
-// Token limits
-const MAX_CONTEXT_TOKENS = 8000;
-const MAX_RESPONSE_TOKENS = 1024;
-const CHUNK_SIZE = 1000;
-const CHUNK_OVERLAP = 200;
-const TOP_K_CHUNKS = 3;
+// ENHANCED: Increased token limits and chunk parameters
+const MAX_CONTEXT_TOKENS = 16000; // Increased from 8000
+const MAX_RESPONSE_TOKENS = 2048; // Increased from 1024
+const CHUNK_SIZE = 2000; // Increased from 1000
+const CHUNK_OVERLAP = 400; // Increased from 200
+const TOP_K_CHUNKS = 10; // Increased from 3
 
 export interface RAGConfig {
   supabaseUrl: string;
   supabaseKey: string;
   hfToken?: string;
-  geminiApiKey?: string; // Changed from anthropicApiKey
+  geminiApiKey?: string;
   githubToken?: string;
 }
 
@@ -35,9 +35,15 @@ export interface QueryRepositoryOptions {
   maxChunks?: number;
 }
 
-/**
- * Initialize RAG client with Gemini configuration
- */
+// ENHANCED: Repository metadata structure
+interface RepositoryMetadata {
+  readme?: string;
+  fileTree: string;
+  languages: string[];
+  framework?: string;
+  totalFiles: number;
+}
+
 export function createRAGClient(config: RAGConfig) {
   const supabaseClient = vectorSearchModule.createSupabaseVectorClient(
     config.supabaseUrl,
@@ -47,7 +53,7 @@ export function createRAGClient(config: RAGConfig) {
   const geminiClient = config.geminiApiKey
     ? new GeminiClient({
         apiKey: config.geminiApiKey,
-        model: "gemini-2.5-flash", // Using latest Gemini model
+        model: "gemini-2.5-flash",
       })
     : null;
 
@@ -56,7 +62,7 @@ export function createRAGClient(config: RAGConfig) {
     geminiClient,
 
     /**
-     * Embed a repository: fetch, chunk, embed, and store
+     * ENHANCED: Embed repository with metadata extraction
      */
     async embedRepository(options: EmbedRepositoryOptions): Promise<void> {
       const { repoId, owner, repo, onProgress } = options;
@@ -64,7 +70,7 @@ export function createRAGClient(config: RAGConfig) {
       try {
         onProgress?.(`Starting embedding process for ${owner}/${repo}`);
 
-        // Step 1: Fetch GitHub repository contents
+        // Fetch GitHub repository contents
         onProgress?.("Fetching repository contents from GitHub...");
         const repoContent = await githubModule.fetchGitHubRepo(
           owner,
@@ -76,45 +82,84 @@ export function createRAGClient(config: RAGConfig) {
           `Fetched ${repoContent.files.length} files from repository`
         );
 
-        // Step 2: Format and chunk content
-        onProgress?.("Chunking repository content...");
-        const formattedContent =
-          githubModule.formatRepositoryContent(repoContent);
+        // ENHANCED: Extract repository metadata
+        const metadata: RepositoryMetadata = {
+          readme: repoContent.readme || undefined,
+          fileTree: buildFileTree(repoContent.files.map(f => f.path)),
+          languages: extractLanguages(repoContent.files),
+          framework: detectFramework(repoContent.files),
+          totalFiles: repoContent.files.length,
+        };
 
-        const textSplitter = new RecursiveCharacterTextSplitter({
-          chunkSize: CHUNK_SIZE,
-          chunkOverlap: CHUNK_OVERLAP,
-        });
+        onProgress?.("Analyzing repository structure...");
 
-        const chunks = await textSplitter.createDocuments([formattedContent]);
-        onProgress?.(`Split repository into ${chunks.length} chunks`);
+        // ENHANCED: Chunk with file boundary preservation
+        const chunks: Array<{
+          text: string;
+          filePath: string;
+          fileType: string;
+          importance: number;
+        }> = [];
 
-        // Step 3: Generate embeddings
+        // Process README first (high importance)
+        if (repoContent.readme) {
+          const readmeChunks = await chunkWithMetadata(
+            repoContent.readme,
+            "README.md",
+            "documentation",
+            10
+          );
+          chunks.push(...readmeChunks);
+        }
+
+        // Process other files
+        for (const file of repoContent.files) {
+          const importance = calculateImportance(file.path);
+          const fileType = detectFileType(file.path);
+          const fileChunks = await chunkWithMetadata(
+            file.content,
+            file.path,
+            fileType,
+            importance
+          );
+          chunks.push(...fileChunks);
+        }
+
+        onProgress?.(`Created ${chunks.length} chunks with metadata`);
+
+        // Generate embeddings
         onProgress?.("Generating embeddings...");
-        const chunkTexts = chunks.map((chunk) => chunk.pageContent);
+        const chunkTexts = chunks.map((chunk) => chunk.text);
         const vectors = await embeddingsModule.embedDocuments(
           chunkTexts,
           config.hfToken
         );
 
-        onProgress?.(`Generated ${vectors.length} embeddings`);
-
-        // Step 4: Store embeddings in vector table
+        // Store embeddings with metadata
         onProgress?.("Storing embeddings in vector database...");
-
-        // Delete existing embeddings for this repo
         await vectorSearchModule.deleteRepositoryEmbeddings(
           supabaseClient,
           repoId
         );
 
-        // Store new embeddings
-        await vectorSearchModule.storeEmbeddings(
+        // ENHANCED: Store with file metadata
+        await vectorSearchModule.storeEmbeddingsWithMetadata(
           supabaseClient,
           repoId,
-          chunkTexts,
-          vectors
+          chunks.map((chunk, i) => ({
+            text: chunk.text,
+            embedding: vectors[i],
+            chunkIndex: i,
+            filePath: chunk.filePath,
+            metadata: {
+              fileType: chunk.fileType,
+              importance: chunk.importance,
+            },
+          }))
         );
+
+        // ENHANCED: Store repository metadata
+        await storeRepositoryMetadata(supabaseClient, repoId, metadata);
 
         onProgress?.(`Successfully embedded repository ${repoId}`);
       } catch (error) {
@@ -126,7 +171,7 @@ export function createRAGClient(config: RAGConfig) {
     },
 
     /**
-     * Query a repository with a question using Gemini
+     * ENHANCED: Query with rich context and better prompting
      */
     async queryRepository(options: QueryRepositoryOptions): Promise<string> {
       const {
@@ -137,13 +182,16 @@ export function createRAGClient(config: RAGConfig) {
       } = options;
 
       try {
-        // Step 1: Generate query embedding
+        // Generate query embedding
         const questionVector = await embeddingsModule.embedQuery(
           question,
           config.hfToken
         );
 
-        // Step 2: Search for similar chunks using pgvector
+        // ENHANCED: Retrieve repository metadata
+        const metadata = await getRepositoryMetadata(supabaseClient, repoId);
+
+        // Search for similar chunks
         const similarChunks = await vectorSearchModule.searchSimilarChunks(
           supabaseClient,
           repoId,
@@ -156,30 +204,15 @@ export function createRAGClient(config: RAGConfig) {
           throw new Error("No relevant chunks found for the query");
         }
 
-        // Step 3: Build context from top chunks
-        const context = similarChunks
-          .map((chunk, index) => {
-            let contextText = `[Chunk ${index + 1}]`;
-            if (chunk.file_path) {
-              contextText += ` (from ${chunk.file_path})`;
-            }
-            contextText += `\n${chunk.chunk_text}`;
-            return contextText;
-          })
-          .join("\n\n---\n\n");
+        // ENHANCED: Build rich context
+        const context = buildRichContext(similarChunks, metadata);
 
-        // Step 4: Build system prompt
-        const systemPrompt = `You are a helpful AI assistant that answers questions about a GitHub repository. 
-Use the following context from the repository to answer the user's question accurately and helpfully.
-If the context doesn't contain relevant information, say so clearly.
+        // ENHANCED: Build comprehensive system prompt
+        const systemPrompt = buildEnhancedSystemPrompt(metadata, context);
 
-Repository Context:
-${context}`;
-
-        // Step 5: Build conversation messages in Gemini format
+        // Build conversation messages
         const messages: Array<{ role: "user" | "model"; content: string }> = [];
 
-        // Add chat history (convert 'assistant' to 'model' for Gemini)
         for (const msg of chatHistory.slice(-10)) {
           messages.push({
             role: msg.role === "assistant" ? "model" : "user",
@@ -187,44 +220,24 @@ ${context}`;
           });
         }
 
-        // Add current question
         messages.push({
           role: "user",
           content: question,
         });
 
-        // Step 6: Query Gemini with context
+        // Query Gemini
         if (!geminiClient) {
           throw new Error(
             "Gemini API key not configured. Please set GOOGLE_AI_API_KEY environment variable."
           );
         }
 
-        let response: string;
-        try {
-          response = await geminiClient.generateContent({
-            system: systemPrompt,
-            messages,
-            maxTokens: MAX_RESPONSE_TOKENS,
-            temperature: 0.7,
-          });
-        } catch (apiError: any) {
-          // Handle Gemini API errors
-          console.error("[RAG] Gemini API error:", {
-            error: apiError.message,
-            requestId: apiError.requestId,
-          });
-
-          if (
-            apiError.message?.includes("API key") ||
-            apiError.message?.includes("authentication")
-          ) {
-            throw new Error(
-              `Invalid Gemini API key: ${apiError.message}. Please verify your GOOGLE_AI_API_KEY environment variable.`
-            );
-          }
-          throw apiError;
-        }
+        const response = await geminiClient.generateContent({
+          system: systemPrompt,
+          messages,
+          maxTokens: MAX_RESPONSE_TOKENS,
+          temperature: 0.7,
+        });
 
         return response;
       } catch (error) {
@@ -235,16 +248,10 @@ ${context}`;
       }
     },
 
-    /**
-     * Get embedding count for a repository
-     */
     async getEmbeddingCount(repoId: string): Promise<number> {
       return await vectorSearchModule.getEmbeddingCount(supabaseClient, repoId);
     },
 
-    /**
-     * Delete all embeddings for a repository
-     */
     async deleteRepositoryEmbeddings(repoId: string): Promise<void> {
       return await vectorSearchModule.deleteRepositoryEmbeddings(
         supabaseClient,
@@ -254,16 +261,299 @@ ${context}`;
   };
 }
 
+// ENHANCED: Helper functions
+
 /**
- * Estimate token count (rough approximation)
+ * Build file tree structure as string
  */
+function buildFileTree(filePaths: string[]): string {
+  const tree: any = {};
+  
+  filePaths.forEach(path => {
+    const parts = path.split('/');
+    let current = tree;
+    
+    parts.forEach((part, i) => {
+      if (i === parts.length - 1) {
+        current[part] = null; // File
+      } else {
+        current[part] = current[part] || {};
+        current = current[part];
+      }
+    });
+  });
+  
+  return formatTree(tree, '');
+}
+
+function formatTree(node: any, prefix: string): string {
+  let result = '';
+  const entries = Object.entries(node);
+  
+  entries.forEach(([key, value], i) => {
+    const isLast = i === entries.length - 1;
+    const connector = isLast ? '└── ' : '├── ';
+    const extension = isLast ? '    ' : '│   ';
+    
+    result += `${prefix}${connector}${key}\n`;
+    
+    if (value !== null) {
+      result += formatTree(value, prefix + extension);
+    }
+  });
+  
+  return result;
+}
+
+/**
+ * Extract languages from file extensions
+ */
+function extractLanguages(files: any[]): string[] {
+  const extensions = new Set<string>();
+  
+  files.forEach(file => {
+    const ext = file.path.split('.').pop()?.toLowerCase();
+    if (ext) extensions.add(ext);
+  });
+  
+  const langMap: Record<string, string> = {
+    ts: 'TypeScript',
+    tsx: 'TypeScript',
+    js: 'JavaScript',
+    jsx: 'JavaScript',
+    py: 'Python',
+    java: 'Java',
+    go: 'Go',
+    rs: 'Rust',
+    cpp: 'C++',
+    c: 'C',
+  };
+  
+  return Array.from(extensions)
+    .map(ext => langMap[ext])
+    .filter(Boolean);
+}
+
+/**
+ * Detect framework from files
+ */
+function detectFramework(files: any[]): string | undefined {
+  const paths = files.map(f => f.path);
+  
+  if (paths.some(p => p.includes('package.json'))) {
+    if (paths.some(p => p.includes('next.config'))) return 'Next.js';
+    if (paths.some(p => p.includes('vite.config'))) return 'Vite';
+    return 'Node.js';
+  }
+  
+  if (paths.some(p => p.includes('requirements.txt'))) return 'Python';
+  if (paths.some(p => p.includes('pom.xml'))) return 'Maven/Java';
+  if (paths.some(p => p.includes('Cargo.toml'))) return 'Rust';
+  if (paths.some(p => p.includes('go.mod'))) return 'Go';
+  
+  return undefined;
+}
+
+/**
+ * Calculate file importance score
+ */
+function calculateImportance(filePath: string): number {
+  if (filePath.includes('README')) return 10;
+  if (filePath.endsWith('.md')) return 8;
+  if (filePath.includes('package.json')) return 9;
+  if (filePath.includes('config')) return 7;
+  if (filePath.includes('/api/')) return 8;
+  if (filePath.includes('/src/')) return 6;
+  if (filePath.includes('test')) return 3;
+  return 5;
+}
+
+/**
+ * Detect file type
+ */
+function detectFileType(filePath: string): string {
+  if (filePath.endsWith('.md')) return 'documentation';
+  if (filePath.endsWith('.json') || filePath.endsWith('.yaml')) return 'config';
+  if (filePath.includes('/api/')) return 'api';
+  if (filePath.includes('/components/')) return 'component';
+  if (filePath.includes('/lib/')) return 'library';
+  return 'code';
+}
+
+/**
+ * Chunk text with metadata
+ */
+async function chunkWithMetadata(
+  content: string,
+  filePath: string,
+  fileType: string,
+  importance: number
+): Promise<Array<{ text: string; filePath: string; fileType: string; importance: number }>> {
+  const splitter = new RecursiveCharacterTextSplitter({
+    chunkSize: CHUNK_SIZE,
+    chunkOverlap: CHUNK_OVERLAP,
+  });
+  
+  const docs = await splitter.createDocuments([content]);
+  
+  return docs.map(doc => ({
+    text: `File: ${filePath}\n\n${doc.pageContent}`,
+    filePath,
+    fileType,
+    importance,
+  }));
+}
+
+/**
+ * Build rich context from chunks
+ */
+function buildRichContext(chunks: any[], metadata: RepositoryMetadata): string {
+  let context = '=== REPOSITORY CONTEXT ===\n\n';
+  
+  // Add file tree
+  if (metadata.fileTree) {
+    context += '## File Structure:\n```\n';
+    context += metadata.fileTree;
+    context += '```\n\n';
+  }
+  
+  // Add languages and framework
+  if (metadata.languages.length > 0) {
+    context += `## Languages: ${metadata.languages.join(', ')}\n`;
+  }
+  if (metadata.framework) {
+    context += `## Framework: ${metadata.framework}\n`;
+  }
+  context += `## Total Files: ${metadata.totalFiles}\n\n`;
+  
+  // Add README summary if available
+  if (metadata.readme) {
+    context += '## README Summary:\n';
+    context += metadata.readme.substring(0, 500) + '...\n\n';
+  }
+  
+  // Add relevant chunks
+  context += '## Relevant Code Sections:\n\n';
+  chunks.forEach((chunk, i) => {
+    context += `### [${i + 1}] ${chunk.file_path || 'Unknown file'}\n`;
+    context += `Similarity: ${(chunk.similarity * 100).toFixed(1)}%\n`;
+    context += '```\n';
+    context += chunk.chunk_text || chunk.text;
+    context += '\n```\n\n';
+  });
+  
+  return context;
+}
+
+/**
+ * Build enhanced system prompt
+ */
+function buildEnhancedSystemPrompt(
+  metadata: RepositoryMetadata,
+  context: string
+): string {
+  return `You are an expert code analysis AI assistant specialized in understanding and explaining software repositories.
+
+**Your Capabilities:**
+- Analyze code architecture and design patterns
+- Explain code functionality in detail
+- Suggest improvements and best practices
+- Generate project structure diagrams
+- Provide language-specific insights
+- Trace code flow and dependencies
+- Identify potential issues or bugs
+
+**Current Repository Context:**
+${context}
+
+**Instructions:**
+1. **Be Detailed**: Provide comprehensive explanations with examples
+2. **Use Code**: Include code snippets when relevant
+3. **Visualize**: Use tree structures, diagrams, or ASCII art when helpful
+4. **Reference Files**: Always mention specific files when discussing code
+5. **Be Specific**: Give exact line numbers or function names when possible
+6. **Explain Thoroughly**: Don't assume user knowledge - explain concepts
+7. **Suggest Improvements**: Point out optimization opportunities
+8. **Consider Context**: Use the full repository context to provide holistic answers
+
+**Response Format Guidelines:**
+- For code explanations: Include file path, function names, and logic flow
+- For architecture questions: Provide diagrams using text/ASCII
+- For file structure: Use tree format with descriptions
+- For code generation: Provide complete, working examples
+- For debugging: Show exact locations and suggest fixes
+
+**Example Tree Format:**
+\`\`\`
+src/
+├── app/
+│   ├── api/          # API routes
+│   └── components/   # React components
+├── lib/
+│   └── utils/        # Utility functions
+└── types/            # TypeScript types
+\`\`\`
+
+Now, answer the user's question using all available context and following these guidelines.`;
+}
+
+/**
+ * Store repository metadata in database
+ */
+async function storeRepositoryMetadata(
+  client: SupabaseClient,
+  repoId: string,
+  metadata: RepositoryMetadata
+): Promise<void> {
+  const { error } = await client
+    .from('repositories')
+    .update({
+      readme: metadata.readme,
+      file_tree: metadata.fileTree,
+      languages: metadata.languages,
+      framework: metadata.framework,
+    } as any)
+    .eq('id', repoId);
+  
+  if (error) {
+    console.error('Error storing repository metadata:', error);
+  }
+}
+
+/**
+ * Get repository metadata from database
+ */
+async function getRepositoryMetadata(
+  client: SupabaseClient,
+  repoId: string
+): Promise<RepositoryMetadata> {
+  const { data, error } = await client
+    .from('repositories')
+    .select('readme, file_tree, languages, framework, chunk_count')
+    .eq('id', repoId)
+    .single();
+  
+  if (error || !data) {
+    return {
+      fileTree: '',
+      languages: [],
+      totalFiles: 0,
+    };
+  }
+  
+  return {
+    readme: data.readme,
+    fileTree: data.file_tree,
+    languages: data.languages || [],
+    framework: data.framework,
+    totalFiles: data.chunk_count || 0,
+  };
+}
+
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/**
- * Truncate context to fit within token limits
- */
 export function truncateContext(
   chunks: string[],
   maxTokens: number = MAX_CONTEXT_TOKENS

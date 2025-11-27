@@ -93,8 +93,11 @@ export async function POST(request: NextRequest) {
           },
         })
         .then(async () => {
+          // Get embedding count
+          const count = await ragClient.getEmbeddingCount(repoId);
+          
           // Update repository status to ready
-          await dbRepos.updateRepositoryStatus(repoId, "ready");
+          await dbRepos.updateRepositoryStatus(repoId, "ready", undefined, count);
         })
         .catch(async (error) => {
           console.error(`[RAG] Error embedding repository ${repoId}:`, error);

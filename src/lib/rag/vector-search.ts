@@ -27,6 +27,18 @@ export interface SimilarChunk {
   metadata: Record<string, any> | null;
 }
 
+export interface EmbeddingWithMetadata {
+  text: string;
+  embedding: number[];
+  chunkIndex: number;
+  filePath: string;
+  metadata: {
+    fileType: string;
+    importance: number;
+    [key: string]: any;
+  };
+}
+
 /**
  * Create Supabase client for vector operations
  * @param supabaseUrl - Supabase project URL
@@ -74,6 +86,8 @@ export async function storeEmbeddings(
       text: chunkText,
       chunk_index: index,
       embedding: embeddings[index],
+      file_path: null,
+      metadata: null,
     }));
 
     // Insert embeddings in batches to avoid payload size limits
@@ -104,6 +118,68 @@ export async function storeEmbeddings(
     return insertedIds;
   } catch (error) {
     console.error("Error storing embeddings:", error);
+    throw error;
+  }
+}
+
+export async function storeEmbeddingsWithMetadata(
+  client: SupabaseClient,
+  repoId: string,
+  embeddings: EmbeddingWithMetadata[]
+): Promise<string[]> {
+  try {
+    // Validate embedding dimensions
+    for (let i = 0; i < embeddings.length; i++) {
+      if (embeddings[i].embedding.length !== EMBEDDING_DIMENSION) {
+        throw new Error(
+          `Embedding ${i} has dimension ${embeddings[i].embedding.length}, expected ${EMBEDDING_DIMENSION}`
+        );
+      }
+    }
+
+    // Prepare records with metadata
+    const records = embeddings.map((item) => ({
+      repository_id: repoId,
+      text: item.text,
+      chunk_index: item.chunkIndex,
+      embedding: item.embedding,
+      file_path: item.filePath,
+      metadata: item.metadata,
+    }));
+
+    console.log(`[Vector] Storing ${records.length} embeddings with metadata for repo ${repoId}`);
+
+    // Insert in batches
+    const batchSize = 100;
+    const insertedIds: string[] = [];
+
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+
+      const { data, error } = await client
+        .from("embeddings")
+        .insert(batch)
+        .select("id");
+
+      if (error) {
+        throw new Error(
+          `Failed to store embeddings batch ${i / batchSize + 1}: ${
+            error.message
+          }`
+        );
+      }
+
+      if (data) {
+        insertedIds.push(...data.map((r: any) => r.id));
+      }
+
+      console.log(`[Vector] Stored batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(records.length / batchSize)}`);
+    }
+
+    console.log(`[Vector] Successfully stored ${insertedIds.length} embeddings`);
+    return insertedIds;
+  } catch (error) {
+    console.error("Error storing embeddings with metadata:", error);
     throw error;
   }
 }
@@ -146,7 +222,7 @@ export async function searchSimilarChunks(
   client: SupabaseClient,
   repoId: string,
   queryEmbedding: number[],
-  limit: number = 3,
+  limit: number = 10,
   threshold: number = 0.0
 ): Promise<SimilarChunk[]> {
   try {
@@ -317,5 +393,53 @@ export async function getEmbeddingCount(
   } catch (error) {
     console.error("Error getting embedding count:", error);
     throw error;
+  }
+}
+
+/**
+ * ENHANCED: Get files by importance for repository
+ */
+export async function getFilesByImportance(
+  client: SupabaseClient,
+  repoId: string,
+  limit: number = 10
+): Promise<Array<{ filePath: string; importance: number; chunkCount: number }>> {
+  try {
+    const { data, error } = await client
+      .from("embeddings")
+      .select("file_path, metadata")
+      .eq("repository_id", repoId);
+
+    if (error || !data) {
+      return [];
+    }
+
+    // Aggregate by file
+    const fileMap = new Map<string, { importance: number; count: number }>();
+
+    data.forEach((item: any) => {
+      if (item.file_path) {
+        const current = fileMap.get(item.file_path) || { importance: 0, count: 0 };
+        const importance = item.metadata?.importance || 5;
+
+        fileMap.set(item.file_path, {
+          importance: Math.max(current.importance, importance),
+          count: current.count + 1,
+        });
+      }
+    });
+
+    // Convert to array and sort
+    return Array.from(fileMap.entries())
+      .map(([filePath, data]) => ({
+        filePath,
+        importance: data.importance,
+        chunkCount: data.count,
+      }))
+      .sort((a, b) => b.importance - a.importance)
+      .slice(0, limit);
+  } catch (error) {
+    console.error("Error getting files by importance:", error);
+    return [];
   }
 }

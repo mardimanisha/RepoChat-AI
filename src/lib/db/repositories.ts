@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Database operations for repositories
- * Replaces KV store operations with Supabase table operations
+ * ENHANCED: Database operations for repositories with metadata support
  */
 
 import { createClient } from "@/lib/supabase/admin";
@@ -15,13 +14,15 @@ export interface Repository {
   status: "processing" | "ready" | "error";
   error?: string;
   chunkCount?: number;
+  // ENHANCED: New metadata fields
+  readme?: string;
+  fileTree?: string;
+  languages?: string[];
+  framework?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-/**
- * Get a repository by ID
- */
 export async function getRepository(
   repoId: string
 ): Promise<Repository | null> {
@@ -41,24 +42,9 @@ export async function getRepository(
     return null;
   }
 
-  const repo = data as any;
-  return {
-    id: repo.id,
-    userId: repo.user_id,
-    url: repo.url,
-    owner: repo.owner,
-    name: repo.name,
-    status: repo.status,
-    error: repo.error || undefined,
-    chunkCount: repo.chunk_count || undefined,
-    createdAt: repo.created_at,
-    updatedAt: repo.updated_at,
-  };
+  return transformRepository(data);
 }
 
-/**
- * Get all repositories for a user
- */
 export async function getUserRepositories(
   userId: string
 ): Promise<Repository[]> {
@@ -77,23 +63,9 @@ export async function getUserRepositories(
     return [];
   }
 
-  return (data || []).map((repo: any) => ({
-    id: repo.id,
-    userId: repo.user_id,
-    url: repo.url,
-    owner: repo.owner,
-    name: repo.name,
-    status: repo.status,
-    error: repo.error || undefined,
-    chunkCount: repo.chunk_count || undefined,
-    createdAt: repo.created_at,
-    updatedAt: repo.updated_at,
-  }));
+  return (data || []).map(transformRepository);
 }
 
-/**
- * Create a new repository
- */
 export async function createRepository(
   repo: Omit<Repository, "createdAt" | "updatedAt">
 ): Promise<Repository> {
@@ -109,6 +81,10 @@ export async function createRepository(
       status: repo.status,
       error: repo.error || null,
       chunk_count: repo.chunkCount || 0,
+      readme: repo.readme || null,
+      file_tree: repo.fileTree || null,
+      languages: repo.languages || [],
+      framework: repo.framework || null,
     } as any)
     .select()
     .single();
@@ -118,24 +94,9 @@ export async function createRepository(
     throw new Error(`Failed to create repository: ${error.message}`);
   }
 
-  const result = data as any;
-  return {
-    id: result.id,
-    userId: result.user_id,
-    url: result.url,
-    owner: result.owner,
-    name: result.name,
-    status: result.status,
-    error: result.error || undefined,
-    chunkCount: result.chunk_count || undefined,
-    createdAt: result.created_at,
-    updatedAt: result.updated_at,
-  };
+  return transformRepository(data);
 }
 
-/**
- * Update repository status
- */
 export async function updateRepositoryStatus(
   repoId: string,
   status: "processing" | "ready" | "error",
@@ -167,8 +128,81 @@ export async function updateRepositoryStatus(
 }
 
 /**
- * Delete a repository and all related data (cascades via foreign keys)
+ * ENHANCED: Update repository metadata after embedding
  */
+export async function updateRepositoryMetadata(
+  repoId: string,
+  metadata: {
+    readme?: string;
+    fileTree?: string;
+    languages?: string[];
+    framework?: string;
+    chunkCount?: number;
+  }
+): Promise<void> {
+  const supabase = createClient();
+  
+  const updateData: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (metadata.readme !== undefined) {
+    updateData.readme = metadata.readme;
+  }
+
+  if (metadata.fileTree !== undefined) {
+    updateData.file_tree = metadata.fileTree;
+  }
+
+  if (metadata.languages !== undefined) {
+    updateData.languages = metadata.languages;
+  }
+
+  if (metadata.framework !== undefined) {
+    updateData.framework = metadata.framework;
+  }
+
+  if (metadata.chunkCount !== undefined) {
+    updateData.chunk_count = metadata.chunkCount;
+  }
+
+  const { error } = await (
+    supabase.from("repositories").update(updateData as never) as any
+  ).eq("id", repoId);
+
+  if (error) {
+    console.error(`[DB] Error updating repository metadata ${repoId}:`, error);
+    throw new Error(`Failed to update repository metadata: ${error.message}`);
+  }
+
+  console.log(`[DB] Updated metadata for repository ${repoId}`);
+}
+
+/**
+ * ENHANCED: Get repository with full metadata
+ */
+export async function getRepositoryWithMetadata(
+  repoId: string
+): Promise<Repository | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("repositories")
+    .select("*")
+    .eq("id", repoId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[DB] Error fetching repository with metadata ${repoId}:`, error);
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return transformRepository(data);
+}
+
 export async function deleteRepository(repoId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
@@ -182,9 +216,6 @@ export async function deleteRepository(repoId: string): Promise<void> {
   }
 }
 
-/**
- * Check if repository exists for user
- */
 export async function repositoryExistsForUser(
   userId: string,
   owner: string,
@@ -205,4 +236,26 @@ export async function repositoryExistsForUser(
   }
 
   return data !== null;
+}
+
+/**
+ * Helper function to transform database record to Repository interface
+ */
+function transformRepository(data: any): Repository {
+  return {
+    id: data.id,
+    userId: data.user_id,
+    url: data.url,
+    owner: data.owner,
+    name: data.name,
+    status: data.status,
+    error: data.error || undefined,
+    chunkCount: data.chunk_count || undefined,
+    readme: data.readme || undefined,
+    fileTree: data.file_tree || undefined,
+    languages: data.languages || undefined,
+    framework: data.framework || undefined,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
 }
