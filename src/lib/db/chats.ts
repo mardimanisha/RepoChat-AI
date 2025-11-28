@@ -133,7 +133,7 @@ export async function updateChatTitle(chatId: string, title: string): Promise<Ch
     .update({ 
       title,
       updated_at: new Date().toISOString() 
-    } as any)
+    } as never)
     .eq("id", chatId)
     .select()
     .single();
