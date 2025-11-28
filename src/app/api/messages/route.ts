@@ -5,6 +5,7 @@ import * as dbChats from "@/lib/db/chats";
 import * as dbMessages from "@/lib/db/messages";
 import * as dbRepos from "@/lib/db/repositories";
 import { createRAGClient } from "@/lib/rag/query";
+import { generateChatTitle } from "@/lib/utils/chat-title";
 
 // POST /api/messages - Send a message and get AI response
 export async function POST(request: NextRequest) {
@@ -38,10 +39,14 @@ export async function POST(request: NextRequest) {
 
     if (repository.status !== "ready") {
       return NextResponse.json(
-        { error: "Repository is still processing" },
+        { error: "Repository is still being analyzed" },
         { status: 400 }
       );
     }
+
+    // Check if this is the first message (chat has zero messages)
+    const messageCount = await dbMessages.getMessageCount(chatId);
+    const isFirstMessage = messageCount === 0;
 
     // Create user message
     const userMessageId = `${chatId}:msg:${Date.now()}`;
@@ -51,6 +56,13 @@ export async function POST(request: NextRequest) {
       role: "user",
       content,
     });
+
+    // Generate and update chat title if this is the first message
+    let updatedChat: dbChats.Chat | null = null;
+    if (isFirstMessage) {
+      const newTitle = generateChatTitle(content);
+      updatedChat = await dbChats.updateChatTitle(chatId, newTitle);
+    }
 
     // Get chat history for RAG context
     const chatHistory = await dbMessages.getChatHistory(chatId, 10);
@@ -112,7 +124,7 @@ export async function POST(request: NextRequest) {
           "Gemini API quota exceeded. Please check your usage limits or upgrade your plan.";
       }
 
-      response = `I encountered an error while processing your question: ${errorMessage}. Please try again or contact support if the issue persists.`;
+      response = `I encountered an error while analyzing your question: ${errorMessage}. Please try again or contact support if the issue persists.`;
     }
 
     // Create assistant message
@@ -124,13 +136,16 @@ export async function POST(request: NextRequest) {
       content: response,
     });
 
-    // Update chat's updatedAt timestamp
-    await dbChats.updateChatTimestamp(chatId);
+    // Update chat's updatedAt timestamp (if title wasn't already updated)
+    if (!isFirstMessage) {
+      await dbChats.updateChatTimestamp(chatId);
+    }
 
     return NextResponse.json(
       {
         userMessage,
         assistantMessage,
+        ...(updatedChat && { updatedChat }),
       },
       { status: 201 }
     );

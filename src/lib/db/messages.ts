@@ -85,3 +85,21 @@ export async function getChatHistory(
     content: msg.content,
   }));
 }
+
+/**
+ * Get message count for a chat (efficient check for zero messages)
+ */
+export async function getMessageCount(chatId: string): Promise<number> {
+  const supabase = createClient();
+  const { count, error } = await supabase
+    .from("messages")
+    .select("*", { count: "exact", head: true })
+    .eq("chat_id", chatId);
+
+  if (error) {
+    console.error(`[DB] Error counting messages for chat ${chatId}:`, error);
+    return 0;
+  }
+
+  return count || 0;
+}

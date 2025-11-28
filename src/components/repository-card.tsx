@@ -17,13 +17,13 @@ export function RepositoryCard({ repository, onClick, onDelete }: RepositoryCard
   const statusConfig = {
     processing: {
       icon: Loader2,
-      label: 'Processing',
+      label: 'Analyzing…',
       color: 'bg-blue-500',
       className: 'animate-spin',
     },
     ready: {
       icon: CheckCircle,
-      label: 'Ready',
+      label: 'Available',
       color: 'bg-green-500',
       className: '',
     },
@@ -72,7 +72,7 @@ export function RepositoryCard({ repository, onClick, onDelete }: RepositoryCard
                 
                 {repository.chunkCount && (
                   <span className="text-xs text-muted-foreground">
-                    {repository.chunkCount} chunks
+                    {repository.chunkCount} sections
                   </span>
                 )}
               </div>

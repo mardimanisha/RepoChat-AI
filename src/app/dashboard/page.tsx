@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Plus, Loader2 } from 'lucide-react';
@@ -11,13 +11,19 @@ import { Sidebar } from '../../components/sidebar';
 import { RepositoryCard } from '../../components/repository-card';
 import { createClient } from '../../lib/supabase/client';
 import { getRepositories, createRepository } from '../../utils/api';
-import type { Repository } from '../../utils/api';
+import type { Repository, Chat } from '../../utils/api';
 import { toast } from 'sonner';
+import { getChats } from '../../utils/api';
+
+interface RecentChat extends Chat {
+  repositoryName?: string;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [repoUrl, setRepoUrl] = useState('');
@@ -39,6 +45,49 @@ export default function DashboardPage() {
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  const loadRecentChats = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) return;
+      
+      // Fetch chats from all repositories
+      const allChats: RecentChat[] = [];
+      
+      for (const repo of repositories) {
+        try {
+          const data = await getChats(repo.id, session.access_token);
+          const chatsWithRepo = (data.chats || []).map((chat: Chat) => ({
+            ...chat,
+            repositoryName: `${repo.owner}/${repo.name}`,
+          }));
+          allChats.push(...chatsWithRepo);
+        } catch (error: any) {
+          console.error(`Error loading chats for repo ${repo.id}:`, error);
+          // Continue with other repositories
+        }
+      }
+      
+      // Sort by updatedAt DESC
+      allChats.sort((a, b) => {
+        const dateA = new Date(a.updatedAt).getTime();
+        const dateB = new Date(b.updatedAt).getTime();
+        return dateB - dateA;
+      });
+      
+      setRecentChats(allChats);
+    } catch (error: any) {
+      console.error('Error loading recent chats:', error);
+    }
+  }, [repositories]);
+
+  useEffect(() => {
+    if (user && repositories.length > 0) {
+      loadRecentChats();
+    }
+  }, [user, repositories, loadRecentChats]);
   
   const checkAuth = async () => {
     try {
@@ -75,6 +124,8 @@ export default function DashboardPage() {
       console.error('Error loading repositories:', error);
     }
   };
+
+  
   
   const handleAddRepository = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,6 +184,12 @@ export default function DashboardPage() {
     await supabase.auth.signOut();
     router.push('/');
   };
+
+  const handleChatSelect = (chatId: string, repoId?: string) => {
+    if (repoId) {
+      router.push(`/repository/${encodeURIComponent(repoId)}?chatId=${chatId}`);
+    }
+  };
   
   if (loading) {
     return (
@@ -144,7 +201,13 @@ export default function DashboardPage() {
   
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar user={user} onLogout={handleLogout} />
+      <Sidebar 
+        user={user} 
+        chats={recentChats}
+        onChatSelect={handleChatSelect}
+        onLogout={handleLogout}
+        showRecentChatsHeader={true}
+      />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-8">

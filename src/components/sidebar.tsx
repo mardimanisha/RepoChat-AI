@@ -15,11 +15,33 @@ interface SidebarProps {
   chats?: Array<{
     id: string;
     title: string;
+    repoId?: string;
+    repositoryName?: string;
+    updatedAt?: string;
   }>;
   onNewChat?: () => void;
-  onChatSelect?: (chatId: string) => void;
+  onChatSelect?: (chatId: string, repoId?: string) => void;
   onLogout?: () => void;
   selectedChatId?: string;
+  showRecentChatsHeader?: boolean;
+}
+
+// Format relative timestamp
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  // For older dates, show formatted date
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export function Sidebar({ 
@@ -28,7 +50,8 @@ export function Sidebar({
   onNewChat, 
   onChatSelect,
   onLogout,
-  selectedChatId 
+  selectedChatId,
+  showRecentChatsHeader = false
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
   
@@ -74,31 +97,58 @@ export function Sidebar({
         )}
       </div>
       
-    
-      
       <div className="flex-1 overflow-y-auto p-2">
-        {chats.map((chat) => (
-          <motion.button
-            key={chat.id}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onChatSelect?.(chat.id)}
-            className={`w-full text-left p-3 rounded-lg mb-1 flex items-center gap-2 transition-colors ${
-              selectedChatId === chat.id
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                : 'hover:bg-sidebar-accent/50 text-sidebar-foreground'
-            }`}
-          >
-            <MessageSquare className="size-4 flex-shrink-0" />
-            <span className="truncate text-sm">{chat.title}</span>
-          </motion.button>
-        ))}
+        {showRecentChatsHeader && chats.length > 0 && (
+          <div className="px-2 py-2 mb-2">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Recent Chats ({chats.length})
+            </h2>
+          </div>
+        )}
+        
+        {chats.length === 0 && showRecentChatsHeader ? (
+          <div className="px-2 py-4 text-center">
+            <p className="text-xs text-muted-foreground">No recent chats</p>
+          </div>
+        ) : (
+          chats.map((chat) => (
+            <motion.button
+              key={chat.id}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onChatSelect?.(chat.id, chat.repoId)}
+              className={`w-full text-left p-3 rounded-lg mb-1 flex flex-col gap-1 transition-colors ${
+                selectedChatId === chat.id
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'hover:bg-sidebar-accent/50 text-sidebar-foreground'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <MessageSquare className="size-4 shrink-0" />
+                <span className="truncate text-sm font-medium">{chat.title}</span>
+              </div>
+              {(chat.repositoryName || chat.updatedAt) && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground pl-6">
+                  {chat.repositoryName && (
+                    <span className="truncate">{chat.repositoryName}</span>
+                  )}
+                  {chat.repositoryName && chat.updatedAt && (
+                    <span>•</span>
+                  )}
+                  {chat.updatedAt && (
+                    <span className="shrink-0">{formatRelativeTime(chat.updatedAt)}</span>
+                  )}
+                </div>
+              )}
+            </motion.button>
+          ))
+        )}
       </div>
       
       {user && (
         <>
           <Separator />
-          <div className="p-2">
+          <div className="mt-auto p-2">
             <Popover>
               <PopoverTrigger asChild>
                 <Button

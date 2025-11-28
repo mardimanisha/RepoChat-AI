@@ -5,6 +5,7 @@ import { GeminiClient } from "../ai/gemini-client";
 import * as embeddingsModule from "./embeddings";
 import * as githubModule from "./github";
 import * as vectorSearchModule from "./vector-search";
+import { processAssistantResponse } from "../../utils/markdown";
 
 // ENHANCED: Increased token limits and chunk parameters
 const MAX_CONTEXT_TOKENS = 16000; // Increased from 8000
@@ -68,7 +69,7 @@ export function createRAGClient(config: RAGConfig) {
       const { repoId, owner, repo, onProgress } = options;
 
       try {
-        onProgress?.(`Starting embedding process for ${owner}/${repo}`);
+        onProgress?.(`Starting analysis for ${owner}/${repo}`);
 
         // Fetch GitHub repository contents
         onProgress?.("Fetching repository contents from GitHub...");
@@ -85,7 +86,7 @@ export function createRAGClient(config: RAGConfig) {
         // ENHANCED: Extract repository metadata
         const metadata: RepositoryMetadata = {
           readme: repoContent.readme || undefined,
-          fileTree: buildFileTree(repoContent.files.map(f => f.path)),
+          fileTree: buildFileTree(repoContent.files.map((f) => f.path)),
           languages: extractLanguages(repoContent.files),
           framework: detectFramework(repoContent.files),
           totalFiles: repoContent.files.length,
@@ -125,10 +126,10 @@ export function createRAGClient(config: RAGConfig) {
           chunks.push(...fileChunks);
         }
 
-        onProgress?.(`Created ${chunks.length} chunks with metadata`);
+        onProgress?.(`Created ${chunks.length} sections with metadata`);
 
         // Generate embeddings
-        onProgress?.("Generating embeddings...");
+        onProgress?.("Analyzing repository...");
         const chunkTexts = chunks.map((chunk) => chunk.text);
         const vectors = await embeddingsModule.embedDocuments(
           chunkTexts,
@@ -136,7 +137,7 @@ export function createRAGClient(config: RAGConfig) {
         );
 
         // Store embeddings with metadata
-        onProgress?.("Storing embeddings in vector database...");
+        onProgress?.("Storing analysis in database...");
         await vectorSearchModule.deleteRepositoryEmbeddings(
           supabaseClient,
           repoId
@@ -161,11 +162,11 @@ export function createRAGClient(config: RAGConfig) {
         // ENHANCED: Store repository metadata
         await storeRepositoryMetadata(supabaseClient, repoId, metadata);
 
-        onProgress?.(`Successfully embedded repository ${repoId}`);
+        onProgress?.(`Successfully analyzed repository ${repoId}`);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
-        onProgress?.(`Error embedding repository: ${errorMessage}`);
+        onProgress?.(`Error analyzing repository: ${errorMessage}`);
         throw error;
       }
     },
@@ -201,7 +202,7 @@ export function createRAGClient(config: RAGConfig) {
         );
 
         if (similarChunks.length === 0) {
-          throw new Error("No relevant chunks found for the query");
+          throw new Error("No relevant sections found for the query");
         }
 
         // ENHANCED: Build rich context
@@ -239,7 +240,8 @@ export function createRAGClient(config: RAGConfig) {
           temperature: 0.7,
         });
 
-        return response;
+        // Clean and process the markdown response
+        return processAssistantResponse(response);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
@@ -268,11 +270,11 @@ export function createRAGClient(config: RAGConfig) {
  */
 function buildFileTree(filePaths: string[]): string {
   const tree: any = {};
-  
-  filePaths.forEach(path => {
-    const parts = path.split('/');
+
+  filePaths.forEach((path) => {
+    const parts = path.split("/");
     let current = tree;
-    
+
     parts.forEach((part, i) => {
       if (i === parts.length - 1) {
         current[part] = null; // File
@@ -282,26 +284,26 @@ function buildFileTree(filePaths: string[]): string {
       }
     });
   });
-  
-  return formatTree(tree, '');
+
+  return formatTree(tree, "");
 }
 
 function formatTree(node: any, prefix: string): string {
-  let result = '';
+  let result = "";
   const entries = Object.entries(node);
-  
+
   entries.forEach(([key, value], i) => {
     const isLast = i === entries.length - 1;
-    const connector = isLast ? '└── ' : '├── ';
-    const extension = isLast ? '    ' : '│   ';
-    
+    const connector = isLast ? "└── " : "├── ";
+    const extension = isLast ? "    " : "│   ";
+
     result += `${prefix}${connector}${key}\n`;
-    
+
     if (value !== null) {
       result += formatTree(value, prefix + extension);
     }
   });
-  
+
   return result;
 }
 
@@ -310,27 +312,27 @@ function formatTree(node: any, prefix: string): string {
  */
 function extractLanguages(files: any[]): string[] {
   const extensions = new Set<string>();
-  
-  files.forEach(file => {
-    const ext = file.path.split('.').pop()?.toLowerCase();
+
+  files.forEach((file) => {
+    const ext = file.path.split(".").pop()?.toLowerCase();
     if (ext) extensions.add(ext);
   });
-  
+
   const langMap: Record<string, string> = {
-    ts: 'TypeScript',
-    tsx: 'TypeScript',
-    js: 'JavaScript',
-    jsx: 'JavaScript',
-    py: 'Python',
-    java: 'Java',
-    go: 'Go',
-    rs: 'Rust',
-    cpp: 'C++',
-    c: 'C',
+    ts: "TypeScript",
+    tsx: "TypeScript",
+    js: "JavaScript",
+    jsx: "JavaScript",
+    py: "Python",
+    java: "Java",
+    go: "Go",
+    rs: "Rust",
+    cpp: "C++",
+    c: "C",
   };
-  
+
   return Array.from(extensions)
-    .map(ext => langMap[ext])
+    .map((ext) => langMap[ext])
     .filter(Boolean);
 }
 
@@ -338,19 +340,19 @@ function extractLanguages(files: any[]): string[] {
  * Detect framework from files
  */
 function detectFramework(files: any[]): string | undefined {
-  const paths = files.map(f => f.path);
-  
-  if (paths.some(p => p.includes('package.json'))) {
-    if (paths.some(p => p.includes('next.config'))) return 'Next.js';
-    if (paths.some(p => p.includes('vite.config'))) return 'Vite';
-    return 'Node.js';
+  const paths = files.map((f) => f.path);
+
+  if (paths.some((p) => p.includes("package.json"))) {
+    if (paths.some((p) => p.includes("next.config"))) return "Next.js";
+    if (paths.some((p) => p.includes("vite.config"))) return "Vite";
+    return "Node.js";
   }
-  
-  if (paths.some(p => p.includes('requirements.txt'))) return 'Python';
-  if (paths.some(p => p.includes('pom.xml'))) return 'Maven/Java';
-  if (paths.some(p => p.includes('Cargo.toml'))) return 'Rust';
-  if (paths.some(p => p.includes('go.mod'))) return 'Go';
-  
+
+  if (paths.some((p) => p.includes("requirements.txt"))) return "Python";
+  if (paths.some((p) => p.includes("pom.xml"))) return "Maven/Java";
+  if (paths.some((p) => p.includes("Cargo.toml"))) return "Rust";
+  if (paths.some((p) => p.includes("go.mod"))) return "Go";
+
   return undefined;
 }
 
@@ -358,13 +360,13 @@ function detectFramework(files: any[]): string | undefined {
  * Calculate file importance score
  */
 function calculateImportance(filePath: string): number {
-  if (filePath.includes('README')) return 10;
-  if (filePath.endsWith('.md')) return 8;
-  if (filePath.includes('package.json')) return 9;
-  if (filePath.includes('config')) return 7;
-  if (filePath.includes('/api/')) return 8;
-  if (filePath.includes('/src/')) return 6;
-  if (filePath.includes('test')) return 3;
+  if (filePath.includes("README")) return 10;
+  if (filePath.endsWith(".md")) return 8;
+  if (filePath.includes("package.json")) return 9;
+  if (filePath.includes("config")) return 7;
+  if (filePath.includes("/api/")) return 8;
+  if (filePath.includes("/src/")) return 6;
+  if (filePath.includes("test")) return 3;
   return 5;
 }
 
@@ -372,12 +374,12 @@ function calculateImportance(filePath: string): number {
  * Detect file type
  */
 function detectFileType(filePath: string): string {
-  if (filePath.endsWith('.md')) return 'documentation';
-  if (filePath.endsWith('.json') || filePath.endsWith('.yaml')) return 'config';
-  if (filePath.includes('/api/')) return 'api';
-  if (filePath.includes('/components/')) return 'component';
-  if (filePath.includes('/lib/')) return 'library';
-  return 'code';
+  if (filePath.endsWith(".md")) return "documentation";
+  if (filePath.endsWith(".json") || filePath.endsWith(".yaml")) return "config";
+  if (filePath.includes("/api/")) return "api";
+  if (filePath.includes("/components/")) return "component";
+  if (filePath.includes("/lib/")) return "library";
+  return "code";
 }
 
 /**
@@ -388,15 +390,22 @@ async function chunkWithMetadata(
   filePath: string,
   fileType: string,
   importance: number
-): Promise<Array<{ text: string; filePath: string; fileType: string; importance: number }>> {
+): Promise<
+  Array<{
+    text: string;
+    filePath: string;
+    fileType: string;
+    importance: number;
+  }>
+> {
   const splitter = new RecursiveCharacterTextSplitter({
     chunkSize: CHUNK_SIZE,
     chunkOverlap: CHUNK_OVERLAP,
   });
-  
+
   const docs = await splitter.createDocuments([content]);
-  
-  return docs.map(doc => ({
+
+  return docs.map((doc) => ({
     text: `File: ${filePath}\n\n${doc.pageContent}`,
     filePath,
     fileType,
@@ -408,40 +417,40 @@ async function chunkWithMetadata(
  * Build rich context from chunks
  */
 function buildRichContext(chunks: any[], metadata: RepositoryMetadata): string {
-  let context = '=== REPOSITORY CONTEXT ===\n\n';
-  
+  let context = "=== REPOSITORY CONTEXT ===\n\n";
+
   // Add file tree
   if (metadata.fileTree) {
-    context += '## File Structure:\n```\n';
+    context += "## File Structure:\n```\n";
     context += metadata.fileTree;
-    context += '```\n\n';
+    context += "```\n\n";
   }
-  
+
   // Add languages and framework
   if (metadata.languages.length > 0) {
-    context += `## Languages: ${metadata.languages.join(', ')}\n`;
+    context += `## Languages: ${metadata.languages.join(", ")}\n`;
   }
   if (metadata.framework) {
     context += `## Framework: ${metadata.framework}\n`;
   }
   context += `## Total Files: ${metadata.totalFiles}\n\n`;
-  
+
   // Add README summary if available
   if (metadata.readme) {
-    context += '## README Summary:\n';
-    context += metadata.readme.substring(0, 500) + '...\n\n';
+    context += "## README Summary:\n";
+    context += metadata.readme.substring(0, 500) + "...\n\n";
   }
-  
-  // Add relevant chunks
-  context += '## Relevant Code Sections:\n\n';
+
+  // Add relevant sections
+  context += "## Relevant Code Sections:\n\n";
   chunks.forEach((chunk, i) => {
-    context += `### [${i + 1}] ${chunk.file_path || 'Unknown file'}\n`;
+    context += `### [${i + 1}] ${chunk.file_path || "Unknown file"}\n`;
     context += `Similarity: ${(chunk.similarity * 100).toFixed(1)}%\n`;
-    context += '```\n';
+    context += "```\n";
     context += chunk.chunk_text || chunk.text;
-    context += '\n```\n\n';
+    context += "\n```\n\n";
   });
-  
+
   return context;
 }
 
@@ -475,16 +484,32 @@ ${context}
 6. **Explain Thoroughly**: Don't assume user knowledge - explain concepts
 7. **Suggest Improvements**: Point out optimization opportunities
 8. **Consider Context**: Use the full repository context to provide holistic answers
+9. **User-Friendly Language**: Do not mention embeddings, chunks, vectors, or RAG. Explain everything in simple, user-friendly terms.
 
 **Response Format Guidelines:**
+- Format all responses in clean, readable Markdown
+- Use headings (##, ###) to organize content
+- Use bullet points (-) and numbered lists (1.) for structured information
+- Use fenced code blocks (\`\`\`language) for code snippets with proper language tags
+- Use inline code (\`code\`) for function names, variables, and short code references
+- Use links ([text](url)) when referencing external resources
+- Use tables for structured data comparisons
 - For code explanations: Include file path, function names, and logic flow
 - For architecture questions: Provide diagrams using text/ASCII
 - For file structure: Use tree format with descriptions
 - For code generation: Provide complete, working examples
 - For debugging: Show exact locations and suggest fixes
 
+**Markdown Formatting Rules:**
+- Avoid excessive newlines (use single line breaks between paragraphs)
+- Avoid excessive bolding (**word**) as emphasis artifacts
+- Ensure all code blocks are properly closed with triple backticks
+- Format JSON data in code blocks with \`\`\`json
+- Use proper heading hierarchy (## for main sections, ### for subsections)
+- Keep formatting clean and consistent
+
 **Example Tree Format:**
-\`\`\`
+
 src/
 ├── app/
 │   ├── api/          # API routes
@@ -492,9 +517,9 @@ src/
 ├── lib/
 │   └── utils/        # Utility functions
 └── types/            # TypeScript types
-\`\`\`
 
-Now, answer the user's question using all available context and following these guidelines.`;
+
+Now, answer the user's question using all available context and following these guidelines. Format your response in clean, readable Markdown.`;
 }
 
 /**
@@ -506,17 +531,17 @@ async function storeRepositoryMetadata(
   metadata: RepositoryMetadata
 ): Promise<void> {
   const { error } = await client
-    .from('repositories')
+    .from("repositories")
     .update({
       readme: metadata.readme,
       file_tree: metadata.fileTree,
       languages: metadata.languages,
       framework: metadata.framework,
     } as any)
-    .eq('id', repoId);
-  
+    .eq("id", repoId);
+
   if (error) {
-    console.error('Error storing repository metadata:', error);
+    console.error("Error storing repository metadata:", error);
   }
 }
 
@@ -528,19 +553,19 @@ async function getRepositoryMetadata(
   repoId: string
 ): Promise<RepositoryMetadata> {
   const { data, error } = await client
-    .from('repositories')
-    .select('readme, file_tree, languages, framework, chunk_count')
-    .eq('id', repoId)
+    .from("repositories")
+    .select("readme, file_tree, languages, framework, chunk_count")
+    .eq("id", repoId)
     .single();
-  
+
   if (error || !data) {
     return {
-      fileTree: '',
+      fileTree: "",
       languages: [],
       totalFiles: 0,
     };
   }
-  
+
   return {
     readme: data.readme,
     fileTree: data.file_tree,

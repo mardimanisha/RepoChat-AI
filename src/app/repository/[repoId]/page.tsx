@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Loader2, Plus } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Sidebar } from '../../../components/sidebar';
@@ -18,11 +18,17 @@ import {
   sendMessage,
 } from '../../../utils/api';
 import type { Repository, Chat, Message } from '../../../utils/api';
+
+// Extended message type for optimistic UI
+type ExtendedMessage = Message & {
+  isStreaming?: boolean;
+};
 import { toast } from 'sonner';
 
 export default function RepositoryPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const repoId = (params?.repoId as string) || '';
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,7 +41,7 @@ export default function RepositoryPage() {
   const [repository, setRepository] = useState<Repository | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ExtendedMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
@@ -150,11 +156,21 @@ export default function RepositoryPage() {
       const data = await getChats(decodeURIComponent(repoId), session.access_token);
       if (!isMountedRef.current) return;
 
-      setChats(data.chats || []);
+      const loadedChats = data.chats || [];
+      setChats(loadedChats);
+
+      // If there's a chatId in URL params, select that chat
+      const chatIdFromUrl = searchParams?.get('chatId');
+      if (chatIdFromUrl && !selectedChat) {
+        const chatToSelect = loadedChats.find((c) => c.id === chatIdFromUrl);
+        if (chatToSelect) {
+          setSelectedChat(chatToSelect);
+        }
+      }
     } catch (error: any) {
       console.error('Load chats error:', error);
     }
-  }, [repoId]);
+  }, [repoId, searchParams, selectedChat]);
 
   const loadMessages = useCallback(async () => {
     if (!selectedChat) return;
@@ -203,9 +219,35 @@ export default function RepositoryPage() {
   const handleSendMessage = useCallback(
     async (content: string) => {
       if (!selectedChat || repository?.status !== 'ready') {
-        toast.error('Repository is not ready yet');
+        toast.error('Repository is not available yet');
         return;
       }
+
+      // Create optimistic user message with temporary ID
+      const timestamp = Date.now();
+      const tempUserId = `temp_user_${timestamp}`;
+      const tempAssistantId = `temp_assistant_${timestamp}`;
+      
+      const optimisticUserMessage: ExtendedMessage = {
+        id: tempUserId,
+        chatId: selectedChat.id,
+        role: 'user',
+        content,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Create streaming placeholder for assistant
+      const streamingPlaceholder: ExtendedMessage = {
+        id: tempAssistantId,
+        chatId: selectedChat.id,
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+        isStreaming: true,
+      };
+
+      // Add optimistic messages immediately
+      setMessages((prevMessages) => [...prevMessages, optimisticUserMessage, streamingPlaceholder]);
 
       setSending(true);
       try {
@@ -214,20 +256,29 @@ export default function RepositoryPage() {
           data: { session },
         } = await supabase.auth.getSession();
 
-        if (!session) return;
+        if (!session) {
+          // Remove temp messages on error
+          setMessages((prevMessages) =>
+            prevMessages.filter((msg) => msg.id !== tempUserId && msg.id !== tempAssistantId)
+          );
+          return;
+        }
 
         const data = await sendMessage(selectedChat.id, content, session.access_token);
 
-        // Use functional update to append messages and derive previous length safely
+        // Replace temp messages with real messages using functional update
         setMessages((prevMessages) => {
-          const newMessages = [...prevMessages, data.userMessage, data.assistantMessage];
+          // Remove temp messages
+          const withoutTemp = prevMessages.filter(
+            (msg) => msg.id !== tempUserId && msg.id !== tempAssistantId
+          );
 
-          // If previous was empty, update chat title (do it here to know previous length)
-          if (prevMessages.length === 0) {
-            const updatedChat: Chat = {
-              ...selectedChat,
-              title: content.substring(0, 50),
-            } as Chat;
+          // Add real messages
+          const newMessages = [...withoutTemp, data.userMessage, data.assistantMessage];
+
+          // If previous was empty and API returned updated chat, sync title optimistically
+          if (prevMessages.filter((m) => !m.id.startsWith('temp_')).length === 0 && (data as any).updatedChat) {
+            const updatedChat = (data as any).updatedChat as Chat;
 
             // update selectedChat & chats safely
             setSelectedChat(updatedChat);
@@ -237,6 +288,10 @@ export default function RepositoryPage() {
           return newMessages;
         });
       } catch (error: any) {
+        // Remove temp messages on error
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => msg.id !== tempUserId && msg.id !== tempAssistantId)
+        );
         toast.error(error?.message || 'Failed to send message');
         console.error('Send message error:', error);
       } finally {
@@ -276,6 +331,7 @@ export default function RepositoryPage() {
           const chat = chats.find((c) => c.id === chatId);
           if (chat) setSelectedChat(chat);
         }}
+        showRecentChatsHeader={false}
         onLogout={handleLogout}
       />
 
@@ -291,7 +347,9 @@ export default function RepositoryPage() {
               <h2 className="truncate">
                 {repository.owner}/{repository.name}
               </h2>
-              <p className="text-xs text-muted-foreground">Status: {repository.status}</p>
+              <p className="text-xs text-muted-foreground">
+                Status: {repository.status === 'ready' ? 'Available' : repository.status === 'processing' ? 'Analyzing…' : repository.status}
+              </p>
             </div>
           )}
         </div>
@@ -328,7 +386,11 @@ export default function RepositoryPage() {
                     </p>
                   </motion.div>
                 ) : (
-                  messages.map((message) => <ChatMessage key={message.id} message={message} />)
+                  <AnimatePresence mode="popLayout">
+                    {messages.map((message) => (
+                      <ChatMessage key={message.id} message={message} />
+                    ))}
+                  </AnimatePresence>
                 )}
                 <div ref={messagesEndRef} />
               </div>
@@ -341,9 +403,9 @@ export default function RepositoryPage() {
                   disabled={sending || repository?.status !== 'ready'}
                   placeholder={
                     repository?.status === 'processing'
-                      ? 'Repository is processing...'
+                      ? 'Repository is being analyzed...'
                       : repository?.status === 'error'
-                      ? 'Repository processing failed'
+                      ? 'Repository analysis failed'
                       : 'Ask a question about this repository...'
                   }
                 />

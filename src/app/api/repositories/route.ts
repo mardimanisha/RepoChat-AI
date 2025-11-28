@@ -101,11 +101,17 @@ export async function POST(request: NextRequest) {
         })
         .catch(async (error) => {
           console.error(`[RAG] Error embedding repository ${repoId}:`, error);
+          // Sanitize error message for user display
+          let errorMessage = error instanceof Error ? error.message : "Unknown error";
+          // Replace technical terms with user-friendly messages
+          if (errorMessage.includes("embedding") || errorMessage.includes("Failed to generate")) {
+            errorMessage = "An error occurred while analyzing the repository.";
+          }
           // Update repository status to error
           await dbRepos.updateRepositoryStatus(
             repoId,
             "error",
-            error instanceof Error ? error.message : "Unknown error"
+            errorMessage
           );
         });
     }

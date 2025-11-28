@@ -122,3 +122,34 @@ export async function updateChatTimestamp(chatId: string): Promise<void> {
     throw new Error(`Failed to update chat: ${error.message}`);
   }
 }
+
+/**
+ * Update chat title
+ */
+export async function updateChatTitle(chatId: string, title: string): Promise<Chat> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("chats")
+    .update({ 
+      title,
+      updated_at: new Date().toISOString() 
+    } as any)
+    .eq("id", chatId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`[DB] Error updating chat title ${chatId}:`, error);
+    throw new Error(`Failed to update chat title: ${error.message}`);
+  }
+
+  const result = data as any;
+  return {
+    id: result.id,
+    repoId: result.repository_id,
+    userId: result.user_id,
+    title: result.title,
+    createdAt: result.created_at,
+    updatedAt: result.updated_at,
+  };
+}
