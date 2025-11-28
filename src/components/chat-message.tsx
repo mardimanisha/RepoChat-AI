@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 import React from 'react';
 import { motion } from 'framer-motion';
@@ -93,7 +94,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 remarkPlugins={[remarkGfm]}
                 components={{
                   // Custom styling for code blocks
-                  code({ node, inline, className, children, ...props }) {
+                  code({ node, inline, className, children, ...props } : any) {
                     const match = /language-(\w+)/.exec(className || '');
                     return !inline && match ? (
                       <pre className="bg-muted-foreground/10 rounded-lg p-3 overflow-x-auto my-2">
