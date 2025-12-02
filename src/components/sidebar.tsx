@@ -1,7 +1,7 @@
 'use client'
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Plus, MessageSquare, User, Settings, Moon, Sun, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, MessageSquare, User, Moon, Sun, LogOut, Menu, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Separator } from './ui/separator';
@@ -44,25 +44,24 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function Sidebar({ 
-  user, 
-  chats = [], 
-  onNewChat, 
+// Shared Sidebar Content Component
+function SidebarContent({
+  user,
+  chats = [],
+  onNewChat,
   onChatSelect,
   onLogout,
   selectedChatId,
-  showRecentChatsHeader = false
-}: SidebarProps) {
+  showRecentChatsHeader = false,
+  showCloseButton = false,
+  onClose,
+}: SidebarProps & { showCloseButton?: boolean; onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
-  
+
   return (
-    <motion.div
-      initial={{ x: -300 }}
-      animate={{ x: 0 }}
-      className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
-    >
-      {/* Logo Section - NEW */}
-      <div className="p-4 border-b border-sidebar-border">
+    <>
+      {/* Header with Logo */}
+      <div className={`flex items-center ${showCloseButton ? 'justify-between' : ''} p-4 border-b border-sidebar-border`}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
             <svg 
@@ -82,8 +81,19 @@ export function Sidebar({
             <p className="text-xs text-muted-foreground">AI Assistant</p>
           </div>
         </div>
+        {showCloseButton && onClose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Close menu"
+          >
+            <X className="size-5" />
+          </Button>
+        )}
       </div>
-      
+
+      {/* New Chat Button */}
       <div className="p-4">
         {onNewChat && (
           <Button
@@ -97,6 +107,7 @@ export function Sidebar({
         )}
       </div>
       
+      {/* Chats List */}
       <div className="flex-1 overflow-y-auto p-2">
         {showRecentChatsHeader && chats.length > 0 && (
           <div className="px-2 py-2 mb-2">
@@ -145,6 +156,7 @@ export function Sidebar({
         )}
       </div>
       
+      {/* User Section */}
       {user && (
         <>
           <Separator />
@@ -202,6 +214,122 @@ export function Sidebar({
           </div>
         </>
       )}
-    </motion.div>
+    </>
+  );
+}
+
+export function Sidebar({ 
+  user, 
+  chats = [], 
+  onNewChat, 
+  onChatSelect,
+  onLogout,
+  selectedChatId,
+  showRecentChatsHeader = false
+}: SidebarProps) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(true); // Default to true to avoid hydration issues
+
+  // Track desktop state and close mobile menu when resized to desktop
+  useEffect(() => {
+    const checkDesktop = () => {
+      const desktop = window.innerWidth >= 1024;
+      setIsDesktop(desktop);
+      if (desktop) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    checkDesktop();
+    window.addEventListener('resize', checkDesktop);
+    return () => window.removeEventListener('resize', checkDesktop);
+  }, []);
+
+  // Close mobile menu when chat is selected
+  const handleChatSelect = (chatId: string, repoId?: string) => {
+    onChatSelect?.(chatId, repoId);
+    setIsMobileMenuOpen(false);
+  };
+
+  // Close mobile menu when new chat is created
+  const handleNewChat = () => {
+    onNewChat?.();
+    setIsMobileMenuOpen(false);
+  };
+
+  // Close mobile menu on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isMobileMenuOpen]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileMenuOpen]);
+  
+  return (
+    <>
+      {/* Hamburger Menu Button - Mobile Only */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="fixed top-4 left-4 z-50 lg:hidden"
+        onClick={() => setIsMobileMenuOpen(true)}
+        aria-label="Open menu"
+        aria-expanded={isMobileMenuOpen}
+      >
+        <Menu className="size-5" />
+      </Button>
+
+      {/* Overlay Backdrop - Mobile Only */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <motion.div
+        initial={isDesktop ? { x: -300 } : false}
+        animate={{
+          x: isDesktop ? 0 : (isMobileMenuOpen ? 0 : -256),
+        }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col fixed lg:static top-0 left-0 z-40"
+      >
+        <SidebarContent
+          user={user}
+          chats={chats}
+          onNewChat={isMobileMenuOpen ? handleNewChat : onNewChat}
+          onChatSelect={isMobileMenuOpen ? handleChatSelect : onChatSelect}
+          onLogout={onLogout}
+          selectedChatId={selectedChatId}
+          showRecentChatsHeader={showRecentChatsHeader}
+          showCloseButton={isMobileMenuOpen}
+          onClose={() => setIsMobileMenuOpen(false)}
+        />
+      </motion.div>
+    </>
   );
 }

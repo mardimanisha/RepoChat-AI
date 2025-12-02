@@ -130,11 +130,11 @@ export default function AuthPage() {
               </div>
             </motion.div>
             
-            <CardTitle className="text-2xl">
+            <CardTitle className="text-xl md:text-2xl">
               {isSignUp ? 'Create an account' : 'Welcome back'}
             </CardTitle>
             
-            <CardDescription>
+            <CardDescription className="text-sm md:text-base">
               {isSignUp 
                 ? 'Sign up to start chatting with repositories' 
                 : 'Sign in to continue to your dashboard'}
@@ -144,10 +144,10 @@ export default function AuthPage() {
           <CardContent className="space-y-4">
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full text-sm md:text-base"
               onClick={handleGoogleSignIn}
             >
-              <svg className="size-4 mr-2" viewBox="0 0 24 24">
+              <svg className="size-4 mr-2 flex-shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -165,14 +165,14 @@ export default function AuthPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Continue with Google
+              <span className="truncate">Continue with Google</span>
             </Button>
             
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <Separator />
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
+              <div className="relative flex justify-center text-xs md:text-sm uppercase">
                 <span className="bg-card px-2 text-muted-foreground">
                   Or continue with
                 </span>
@@ -182,14 +182,14 @@ export default function AuthPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {isSignUp && (
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
+                  <Label htmlFor="name" className="text-sm md:text-base">Name</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-3 size-4 text-muted-foreground" />
                     <Input
                       id="name"
                       type="text"
                       placeholder="John Doe"
-                      className="pl-10"
+                      className="pl-10 text-sm md:text-base"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required={isSignUp}
@@ -199,14 +199,14 @@ export default function AuthPage() {
               )}
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-sm md:text-base">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 size-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="name@example.com"
-                    className="pl-10"
+                    className="pl-10 text-sm md:text-base"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
@@ -215,14 +215,14 @@ export default function AuthPage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-sm md:text-base">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
                   <Input
                     id="password"
                     type="password"
                     placeholder="••••••••"
-                    className="pl-10"
+                    className="pl-10 text-sm md:text-base"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
@@ -232,7 +232,7 @@ export default function AuthPage() {
               
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full text-sm md:text-base"
                 disabled={loading}
               >
                 {loading ? (
@@ -246,7 +246,7 @@ export default function AuthPage() {
               </Button>
             </form>
             
-            <div className="text-center text-sm">
+            <div className="text-center text-sm md:text-base">
               {isSignUp ? (
                 <>
                   Already have an account?{' '}

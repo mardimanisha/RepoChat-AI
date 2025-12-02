@@ -36,17 +36,19 @@ export interface Message {
 async function fetchApi(
   endpoint: string, 
   options: RequestInit = {},
-  token?: string
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _token?: string // Token parameter kept for backward compatibility but not used (auth via cookies)
 ) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
   
-  // Add Authorization header if token is provided
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  // Do NOT send Authorization header to avoid 431 errors
+  // Supabase SSR automatically sets cookies on authentication, and the server
+  // (verifyUser function) reads from cookies first. This prevents header size issues.
+  // Cookies are handled separately by the browser and don't contribute to header size limits.
+  // The token parameter is kept for backward compatibility but is not used.
   
   console.log(`API Request: ${endpoint}`, { method: options.method || 'GET' });
   
@@ -54,7 +56,15 @@ async function fetchApi(
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       ...options,
       headers,
+      // Ensure cookies are sent with the request (required for cookie-based auth)
+      credentials: 'include',
     });
+    
+    // Handle 431 (Request Header Fields Too Large) before parsing
+    if (response.status === 431) {
+      console.error(`API Error 431: Request headers too large for ${endpoint}`);
+      throw new Error('Request headers are too large. Please try clearing your browser cookies or signing out and signing back in.');
+    }
     
     // Check if response is JSON before parsing
     const contentType = response.headers.get('content-type');
@@ -80,6 +90,10 @@ async function fetchApi(
     return data;
   } catch (error: any) {
     console.error(`API Fetch Error for ${endpoint}:`, error);
+    // Preserve the original error message if it's already user-friendly
+    if (error.message && error.message.includes('Request headers are too large')) {
+      throw error;
+    }
     throw new Error(error.message || 'Network request failed');
   }
 }
@@ -93,34 +107,35 @@ export async function signup(email: string, password: string, name: string) {
 }
 
 // Repository API
-export async function createRepository(url: string, token: string): Promise<{ repository: Repository }> {
+// Token parameter is optional - authentication is handled via cookies to avoid 431 errors
+export async function createRepository(url: string, token?: string): Promise<{ repository: Repository }> {
   return fetchApi('/repositories', {
     method: 'POST',
     body: JSON.stringify({ url }),
   }, token);
 }
 
-export async function getRepositories(token: string): Promise<{ repositories: Repository[] }> {
+export async function getRepositories(token?: string): Promise<{ repositories: Repository[] }> {
   return fetchApi('/repositories', {
     method: 'GET',
   }, token);
 }
 
-export async function getRepository(repoId: string, token: string): Promise<{ repository: Repository }> {
+export async function getRepository(repoId: string, token?: string): Promise<{ repository: Repository }> {
   return fetchApi(`/repositories/${encodeURIComponent(repoId)}`, {
     method: 'GET',
   }, token);
 }
 
 // Chat API
-export async function createChat(repoId: string, title: string, token: string): Promise<{ chat: Chat }> {
+export async function createChat(repoId: string, title: string, token?: string): Promise<{ chat: Chat }> {
   return fetchApi('/chats', {
     method: 'POST',
     body: JSON.stringify({ repoId, title }),
   }, token);
 }
 
-export async function getChats(repoId: string, token: string): Promise<{ chats: Chat[] }> {
+export async function getChats(repoId: string, token?: string): Promise<{ chats: Chat[] }> {
   return fetchApi(`/chats/${encodeURIComponent(repoId)}`, {
     method: 'GET',
   }, token);
@@ -130,7 +145,7 @@ export async function getChats(repoId: string, token: string): Promise<{ chats: 
 export async function sendMessage(
   chatId: string, 
   content: string, 
-  token: string
+  token?: string
 ): Promise<{ userMessage: Message; assistantMessage: Message }> {
   return fetchApi('/messages', {
     method: 'POST',
@@ -138,7 +153,7 @@ export async function sendMessage(
   }, token);
 }
 
-export async function getMessages(chatId: string, token: string): Promise<{ messages: Message[] }> {
+export async function getMessages(chatId: string, token?: string): Promise<{ messages: Message[] }> {
   return fetchApi(`/messages/${chatId}`, {
     method: 'GET',
   }, token);

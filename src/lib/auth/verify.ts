@@ -1,30 +1,49 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* Auth utility for JWT verification in Next.js API routes */
 
-import { createClient } from "@/lib/supabase/admin";
+import { createClient as createAdminClient } from "@/lib/supabase/admin";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 /**
- * Verifies the user from the Authorization header
+ * Verifies the user from cookies (preferred) or Authorization header (fallback)
+ * Uses cookies first to avoid 431 errors from large Authorization headers
  * @param request - Next.js Request object
  * @returns User object if valid, null otherwise
  */
 export async function verifyUser(
   request: Request
 ): Promise<{ id: string; email?: string } | null> {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader) {
-    return null;
-  }
-
-  const accessToken = authHeader.split(" ")[1];
-  if (!accessToken) {
-    return null;
-  }
-
   try {
-    // First, try to verify JWT locally (faster, no network call)
-    // This works if the JWT is signed with the JWT secret
-    const supabase = createClient();
+    // First, try to get user from cookies (preferred method to avoid 431 errors)
+    // This uses Supabase SSR which reads from cookies automatically
+    try {
+      const supabase = await createServerClient();
+      const {
+        data: { user },
+        error: cookieError,
+      } = await supabase.auth.getUser();
+
+      if (!cookieError && user) {
+        return user;
+      }
+    } catch (cookieError: any) {
+      // If cookie-based auth fails, fall back to Authorization header
+      console.log("Cookie-based auth failed, trying Authorization header:", cookieError?.message);
+    }
+
+    // Fallback: Try Authorization header (for backward compatibility)
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return null;
+    }
+
+    const accessToken = authHeader.split(" ")[1];
+    if (!accessToken) {
+      return null;
+    }
+
+    // Use admin client to verify the token
+    const supabase = createAdminClient();
 
     // Use getUser with a shorter timeout, or verify JWT directly
     const {

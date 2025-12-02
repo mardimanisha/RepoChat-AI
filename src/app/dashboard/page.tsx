@@ -58,7 +58,9 @@ export default function DashboardPage() {
       
       for (const repo of repositories) {
         try {
-          const data = await getChats(repo.id, session.access_token);
+          // Authentication is handled via cookies to avoid 431 errors
+          // No need to pass the token - the server reads from cookies
+          const data = await getChats(repo.id);
           const chatsWithRepo = (data.chats || []).map((chat: Chat) => ({
             ...chat,
             repositoryName: `${repo.owner}/${repo.name}`,
@@ -118,7 +120,9 @@ export default function DashboardPage() {
       
       if (!session) return;
       
-      const data = await getRepositories(session.access_token);
+      // Authentication is handled via cookies to avoid 431 errors
+      // No need to pass the token - the server reads from cookies
+      const data = await getRepositories();
       setRepositories(data.repositories);
     } catch (error: any) {
       console.error('Error loading repositories:', error);
@@ -147,7 +151,9 @@ export default function DashboardPage() {
         return;
       }
       
-      const data = await createRepository(repoUrl, session.access_token);
+      // Authentication is handled via cookies to avoid 431 errors
+      // No need to pass the token - the server reads from cookies
+      const data = await createRepository(repoUrl);
       setRepositories([...repositories, data.repository]);
       setRepoUrl('');
       toast.success('Repository added successfully!');
@@ -210,14 +216,14 @@ export default function DashboardPage() {
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-6xl mx-auto space-y-8"
           >
-            <div>
-              <h1 className="text-3xl mb-2">Your Repositories</h1>
+            <div className="text-center lg:text-left">
+              <h1 className="text-2xl md:text-3xl lg:text-4xl mb-2">Your Repositories</h1>
               <p className="text-muted-foreground">
                 Add GitHub repositories to chat with them using AI
               </p>
@@ -225,7 +231,7 @@ export default function DashboardPage() {
             
             <Card>
               <CardContent className="p-6">
-                <form onSubmit={handleAddRepository} className="flex gap-3">
+                <form onSubmit={handleAddRepository} className="flex flex-col sm:flex-row gap-3">
                   <Input
                     placeholder="https://github.com/owner/repository"
                     value={repoUrl}
@@ -262,7 +268,7 @@ export default function DashboardPage() {
                 </p>
               </motion.div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {repositories.map((repo) => (
                   <RepositoryCard
                     key={repo.id}

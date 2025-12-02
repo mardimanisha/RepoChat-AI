@@ -131,7 +131,8 @@ export default function RepositoryPage() {
 
       if (!session || !repoId) return;
 
-      const data = await getRepository(decodeURIComponent(repoId), session.access_token);
+      // Authentication is handled via cookies to avoid 431 errors
+      const data = await getRepository(decodeURIComponent(repoId));
       if (!isMountedRef.current) return;
 
       setRepository(data.repository);
@@ -153,7 +154,8 @@ export default function RepositoryPage() {
 
       if (!session || !repoId) return;
 
-      const data = await getChats(decodeURIComponent(repoId), session.access_token);
+      // Authentication is handled via cookies to avoid 431 errors
+      const data = await getChats(decodeURIComponent(repoId));
       if (!isMountedRef.current) return;
 
       const loadedChats = data.chats || [];
@@ -183,7 +185,8 @@ export default function RepositoryPage() {
 
       if (!session) return;
 
-      const data = await getMessages(selectedChat.id, session.access_token);
+      // Authentication is handled via cookies to avoid 431 errors
+      const data = await getMessages(selectedChat.id);
       if (!isMountedRef.current) return;
 
       setMessages(data.messages || []);
@@ -203,7 +206,8 @@ export default function RepositoryPage() {
 
       if (!session) return;
 
-      const data = await createChat(decodeURIComponent(repoId), 'New Chat', session.access_token);
+      // Authentication is handled via cookies to avoid 431 errors
+      const data = await createChat(decodeURIComponent(repoId), 'New Chat');
 
       // prepend using functional update to avoid stale closure
       setChats((prev) => [data.chat, ...prev]);
@@ -264,7 +268,8 @@ export default function RepositoryPage() {
           return;
         }
 
-        const data = await sendMessage(selectedChat.id, content, session.access_token);
+        // Authentication is handled via cookies to avoid 431 errors
+        const data = await sendMessage(selectedChat.id, content);
 
         // Replace temp messages with real messages using functional update
         setMessages((prevMessages) => {
@@ -321,7 +326,7 @@ export default function RepositoryPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-col lg:flex-row h-screen bg-background overflow-hidden">
       <Sidebar
         user={user}
         chats={chats}
@@ -335,19 +340,19 @@ export default function RepositoryPage() {
         onLogout={handleLogout}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b border-border p-4 flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')}>
-            <ArrowLeft className="size-4 mr-2" />
-            Back
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <div className="border-b border-border p-3 lg:p-4 flex items-center gap-3 min-w-0 pl-14 lg:pl-4">
+          <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')} className="shrink-0">
+            <ArrowLeft className="size-4 md:mr-2" />
+            <span className="hidden md:inline">Back</span>
           </Button>
 
           {repository && (
-            <div className="flex-1">
-              <h2 className="truncate">
+            <div className="flex-1 min-w-0">
+              <h2 className="truncate text-sm md:text-base">
                 {repository.owner}/{repository.name}
               </h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground truncate">
                 Status: {repository.status === 'ready' ? 'Available' : repository.status === 'processing' ? 'Analyzing…' : repository.status}
               </p>
             </div>
@@ -355,14 +360,14 @@ export default function RepositoryPage() {
         </div>
 
         {!selectedChat ? (
-          <div className="flex-1 flex items-center justify-center p-8">
+          <div className="flex-1 flex items-center justify-center p-4 md:p-8 min-w-0">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-center space-y-4 max-w-md"
+              className="text-center space-y-4 max-w-md w-full px-4"
             >
-              <h2 className="text-2xl">Start a New Chat</h2>
-              <p className="text-muted-foreground">
+              <h2 className="text-xl md:text-2xl">Start a New Chat</h2>
+              <p className="text-muted-foreground text-sm md:text-base">
                 Create a new chat to start asking questions about this repository
               </p>
               <Button onClick={handleNewChat} size="lg">
@@ -373,15 +378,15 @@ export default function RepositoryPage() {
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-3xl mx-auto">
+            <div className="flex-1 overflow-y-auto p-3 md:p-4 lg:p-6 min-w-0">
+              <div className="max-w-3xl mx-auto w-full">
                 {messages.length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center py-12"
                   >
-                    <p className="text-muted-foreground">
+                    <p className="text-muted-foreground text-sm md:text-base px-2">
                       Start the conversation by asking a question about the repository
                     </p>
                   </motion.div>
@@ -396,8 +401,8 @@ export default function RepositoryPage() {
               </div>
             </div>
 
-            <div className="border-t border-border p-4">
-              <div className="max-w-3xl mx-auto">
+            <div className="border-t border-border p-3 md:p-4 pb-safe">
+              <div className="max-w-3xl mx-auto w-full">
                 <ChatInput
                   onSend={handleSendMessage}
                   disabled={sending || repository?.status !== 'ready'}
