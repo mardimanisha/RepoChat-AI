@@ -127,6 +127,12 @@ export async function getRepository(repoId: string, token?: string): Promise<{ r
   }, token);
 }
 
+export async function deleteRepository(repoId: string, token?: string): Promise<{ message: string }> {
+  return fetchApi(`/repositories/${encodeURIComponent(repoId)}`, {
+    method: 'DELETE',
+  }, token);
+}
+
 // Chat API
 export async function createChat(repoId: string, title: string, token?: string): Promise<{ chat: Chat }> {
   return fetchApi('/chats', {

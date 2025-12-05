@@ -10,7 +10,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Sidebar } from '../../components/sidebar';
 import { RepositoryCard } from '../../components/repository-card';
 import { createClient } from '../../lib/supabase/client';
-import { getRepositories, createRepository } from '../../utils/api';
+import { getRepositories, createRepository, deleteRepository } from '../../utils/api';
 import type { Repository, Chat } from '../../utils/api';
 import { toast } from 'sonner';
 import { getChats } from '../../utils/api';
@@ -176,9 +176,12 @@ export default function DashboardPage() {
         return;
       }
       
-      // Handle normal deletion for new format repos
-      toast.success('Repository deleted successfully');
+      // Call the API to delete the repository from the database
+      await deleteRepository(repoId);
+      
+      // Remove from local state after successful deletion
       setRepositories(repositories.filter(r => r.id !== repoId));
+      toast.success('Repository deleted successfully');
     } catch (error: any) {
       console.error('Error deleting repository:', error);
       toast.error(error.message || 'Failed to delete repository');
