@@ -341,7 +341,8 @@ export default function RepositoryPage() {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <div className="border-b border-border p-3 lg:p-4 flex items-center gap-3 min-w-0 pl-14 lg:pl-4">
+        {/* Fixed header with glass effect */}
+        <div className="sticky top-0 z-30 backdrop-blur-md bg-background/80 border-b border-border/50 p-3 lg:p-4 flex items-center gap-3 min-w-0 pl-14 lg:pl-4">
           <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')} className="shrink-0">
             <ArrowLeft className="size-4 md:mr-2" />
             <span className="hidden md:inline">Back</span>

@@ -28,7 +28,10 @@ export async function verifyUser(
       }
     } catch (cookieError: any) {
       // If cookie-based auth fails, fall back to Authorization header
-      console.log("Cookie-based auth failed, trying Authorization header:", cookieError?.message);
+      console.log(
+        "Cookie-based auth failed, trying Authorization header:",
+        cookieError?.message
+      );
     }
 
     // Fallback: Try Authorization header (for backward compatibility)

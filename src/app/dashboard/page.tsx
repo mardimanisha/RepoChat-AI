@@ -216,19 +216,24 @@ export default function DashboardPage() {
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-6xl mx-auto space-y-8"
-          >
+        {/* Fixed header with glass effect */}
+        <div className="sticky top-0 z-30 backdrop-blur-md bg-background/80 border-b border-border/50 p-4 md:p-6 lg:px-8 lg:py-4">
+          <div className="max-w-6xl mx-auto">
             <div className="text-center lg:text-left">
               <h1 className="text-2xl md:text-3xl lg:text-4xl mb-2">Your Repositories</h1>
               <p className="text-muted-foreground">
                 Add GitHub repositories to chat with them using AI
               </p>
             </div>
-            
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-6xl mx-auto space-y-8"
+          >
             <Card>
               <CardContent className="p-6">
                 <form onSubmit={handleAddRepository} className="flex flex-col sm:flex-row gap-3">

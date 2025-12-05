@@ -282,17 +282,19 @@ export function Sidebar({
   
   return (
     <>
-      {/* Hamburger Menu Button - Mobile Only */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed top-4 left-4 z-50 lg:hidden"
-        onClick={() => setIsMobileMenuOpen(true)}
-        aria-label="Open menu"
-        aria-expanded={isMobileMenuOpen}
-      >
-        <Menu className="size-5" />
-      </Button>
+      {/* Hamburger Menu Button - Mobile Only - Hidden when sidebar is open */}
+      {!isMobileMenuOpen && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="fixed top-4 left-4 z-50 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(true)}
+          aria-label="Open menu"
+          aria-expanded={isMobileMenuOpen}
+        >
+          <Menu className="size-5" />
+        </Button>
+      )}
 
       {/* Overlay Backdrop - Mobile Only */}
       <AnimatePresence>
