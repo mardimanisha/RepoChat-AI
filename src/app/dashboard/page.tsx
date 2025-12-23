@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Plus, Loader2 } from 'lucide-react';
@@ -27,105 +27,162 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [repoUrl, setRepoUrl] = useState('');
-  const [showAddDialog, setShowAddDialog] = useState(false);
+  
+  // Refs for managing state and polling
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasInitialized = useRef(false);
+  const loadedChatsForRepos = useRef<Set<string>>(new Set()); // Track which repos have loaded chats
   
   useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          router.push('/auth');
+          return;
+        }
+        
+        setUser((prev: any) => {
+          const newUser = {
+            name: session.user.user_metadata?.name || 'User',
+            email: session.user.email,
+          };
+          // Only update if user data has changed
+          if (prev && prev.name === newUser.name && prev.email === newUser.email) {
+            return prev;
+          }
+          return newUser;
+        });
+      } catch (error) {
+        console.error('Auth check error:', error);
+        router.push('/auth');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
+  // Initialize data once when user is authenticated
   useEffect(() => {
-    if (user) {
-      loadRepositories();
-      
-      // Poll for repository status updates
-      const interval = setInterval(() => {
-        loadRepositories();
-      }, 5000);
-      
-      return () => clearInterval(interval);
+    if (user && !hasInitialized.current) {
+      hasInitialized.current = true;
+      initializeData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const loadRecentChats = useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) return;
-      
-      // Fetch chats from all repositories
-      const allChats: RecentChat[] = [];
-      
-      for (const repo of repositories) {
-        try {
-          // Authentication is handled via cookies to avoid 431 errors
-          // No need to pass the token - the server reads from cookies
-          const data = await getChats(repo.id);
-          const chatsWithRepo = (data.chats || []).map((chat: Chat) => ({
-            ...chat,
-            repositoryName: `${repo.owner}/${repo.name}`,
-          }));
-          allChats.push(...chatsWithRepo);
-        } catch (error: any) {
-          console.error(`Error loading chats for repo ${repo.id}:`, error);
-          // Continue with other repositories
-        }
-      }
-      
-      // Sort by updatedAt DESC
-      allChats.sort((a, b) => {
-        const dateA = new Date(a.updatedAt).getTime();
-        const dateB = new Date(b.updatedAt).getTime();
-        return dateB - dateA;
-      });
-      
-      setRecentChats(allChats);
-    } catch (error: any) {
-      console.error('Error loading recent chats:', error);
+  // Smart polling: Only when there are processing repositories
+  useEffect(() => {
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
+
+    // Check if there are any repositories still processing
+    const hasProcessingRepos = repositories.some(repo => repo.status === 'processing');
+    
+    if (hasProcessingRepos) {
+      // Poll for status updates only when needed
+      intervalRef.current = setInterval(() => {
+        checkRepositoryUpdates();
+      }, 5000);
+    }
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repositories]);
 
-  useEffect(() => {
-    if (user && repositories.length > 0) {
-      loadRecentChats();
-    }
-  }, [user, repositories, loadRecentChats]);
+  // ✅ REMOVED: No longer refetch all chats when repositories change
+  // Chats are now managed granularly via client-side operations
   
-  const checkAuth = async () => {
+  // Helper: Load chats for a specific repository
+  const loadChatsForRepo = async (repo: Repository) => {
+    if (loadedChatsForRepos.current.has(repo.id)) {
+      return; // Already loaded
+    }
+    
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
+      const data = await getChats(repo.id);
+      const chatsWithRepo = (data.chats || []).map((chat: Chat) => ({
+        ...chat,
+        repositoryName: `${repo.owner}/${repo.name}`,
+      }));
       
-      if (!session) {
-        router.push('/auth');
-        return;
-      }
-      
-      setUser({
-        name: session.user.user_metadata?.name || 'User',
-        email: session.user.email,
+      // Add to existing chats and sort
+      setRecentChats(prev => {
+        const combined = [...prev, ...chatsWithRepo];
+        return combined.sort((a, b) => 
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
       });
-    } catch (error) {
-      console.error('Auth check error:', error);
-      router.push('/auth');
-    } finally {
-      setLoading(false);
+      
+      loadedChatsForRepos.current.add(repo.id);
+    } catch (error: any) {
+      console.error(`Error loading chats for repo ${repo.id}:`, error);
     }
   };
-  
-  const loadRepositories = async () => {
+
+  // Initialize: Load repositories and their chats (called once)
+  const initializeData = async () => {
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session) return;
       
-      // Authentication is handled via cookies to avoid 431 errors
-      // No need to pass the token - the server reads from cookies
       const data = await getRepositories();
       setRepositories(data.repositories);
+      
+      // Load chats for all ready repositories
+      const readyRepos = data.repositories.filter((repo: Repository) => repo.status === 'ready');
+      await Promise.all(readyRepos.map((repo: Repository) => loadChatsForRepo(repo)));
     } catch (error: any) {
-      console.error('Error loading repositories:', error);
+      console.error('Error initializing data:', error);
+    }
+  };
+
+  // Polling: Check for status changes (only updates changed repos)
+  const checkRepositoryUpdates = async () => {
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      
+      const data = await getRepositories();
+      const newRepos = data.repositories;
+      
+      setRepositories(prev => {
+        // Detect repos that changed from processing to ready
+        const newlyReadyRepos = newRepos.filter((newRepo: Repository) => {
+          const oldRepo = prev.find(r => r.id === newRepo.id);
+          return oldRepo && 
+                 oldRepo.status === 'processing' && 
+                 newRepo.status === 'ready';
+        });
+        
+        // Load chats for newly ready repositories
+        newlyReadyRepos.forEach((repo: Repository) => {
+          loadChatsForRepo(repo);
+        });
+        
+        // Only update if data actually changed
+        if (JSON.stringify(prev) === JSON.stringify(newRepos)) {
+          return prev;
+        }
+        return newRepos;
+      });
+    } catch (error: any) {
+      console.error('Error checking repository updates:', error);
     }
   };
 
@@ -151,13 +208,21 @@ export default function DashboardPage() {
         return;
       }
       
-      // Authentication is handled via cookies to avoid 431 errors
-      // No need to pass the token - the server reads from cookies
+      // Call API to create repository
       const data = await createRepository(repoUrl);
-      setRepositories([...repositories, data.repository]);
+      const newRepo = data.repository;
+      
+      // ✅ Client-side update: Add to local state immediately
+      setRepositories(prev => [...prev, newRepo]);
+      
+      // ✅ Granular fetch: Load chats only for this new repo (if ready)
+      if (newRepo.status === 'ready') {
+        await loadChatsForRepo(newRepo);
+      }
+      // If processing, polling will handle it when it becomes ready
+      
       setRepoUrl('');
       toast.success('Repository added successfully!');
-      setShowAddDialog(false);
     } catch (error: any) {
       console.error('Error adding repository:', error);
       toast.error(error.message || 'Failed to add repository');
@@ -171,16 +236,24 @@ export default function DashboardPage() {
       // If the repo ID contains a colon, it's an old format - just remove it from the UI
       if (repoId.includes(':')) {
         toast.info('Removing old repository format from your list...');
-        setRepositories(repositories.filter(r => r.id !== repoId));
+        // ✅ Client-side update: Remove from both repositories and chats
+        setRepositories(prev => prev.filter(r => r.id !== repoId));
+        setRecentChats(prev => prev.filter(chat => chat.repoId !== repoId));
+        loadedChatsForRepos.current.delete(repoId);
         toast.success('Old repository removed. Please add it again to use the new format.');
         return;
       }
       
-      // Call the API to delete the repository from the database
+      // Call API to delete the repository from the database
       await deleteRepository(repoId);
       
-      // Remove from local state after successful deletion
-      setRepositories(repositories.filter(r => r.id !== repoId));
+      // ✅ Client-side update: Remove from local state immediately
+      setRepositories(prev => prev.filter(r => r.id !== repoId));
+      
+      // ✅ Client-side update: Remove associated chats (no refetch needed)
+      setRecentChats(prev => prev.filter(chat => chat.repoId !== repoId));
+      loadedChatsForRepos.current.delete(repoId);
+      
       toast.success('Repository deleted successfully');
     } catch (error: any) {
       console.error('Error deleting repository:', error);
