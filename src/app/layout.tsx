@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from '../utils/theme-provider';
 import { Toaster } from '../components/ui/sonner';
@@ -36,6 +37,12 @@ export default function RootLayout({
         <ThemeProvider>
           {children}
           <Toaster position="top-right" />
+          <Script
+            src="https://api.usecrow.org/static/crow-widget.js"
+            strategy="afterInteractive"
+            data-api-url="https://api.usecrow.org"
+            data-product-id="user_38yg9kLxItMv8GyFH4xNMZytg6F"
+          />
         </ThemeProvider>
       </body>
     </html>

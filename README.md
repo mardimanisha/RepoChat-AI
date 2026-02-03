@@ -26,7 +26,7 @@ RepoChat AI is a Next.js application that allows you to have intelligent convers
 - **Frontend**: Next.js 15, React, TypeScript, TailwindCSS
 - **Backend**: Next.js API Routes
 - **Database**: Supabase (PostgreSQL + pgvector)
-- **AI Models**: 
+- **AI Models**:
   - Google Gemini 2.5 Flash (text generation)
   - Hugging Face Sentence Transformers (embeddings)
 - **Authentication**: Supabase Auth
@@ -56,12 +56,14 @@ RepoChat AI is a Next.js application that allows you to have intelligent convers
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/repochat-ai.git
    cd repochat-ai
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    # or
@@ -73,6 +75,7 @@ RepoChat AI is a Next.js application that allows you to have intelligent convers
 3. **Set up Supabase**
 
    Create a new Supabase project and run the migration:
+
    ```bash
    # In Supabase SQL Editor, run:
    src/supabase/migrations/001_create_tables.sql
@@ -81,21 +84,23 @@ RepoChat AI is a Next.js application that allows you to have intelligent convers
 4. **Configure environment variables**
 
    Create a `.env.local` file in the root directory:
+
    ```env
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-   
+
    # AI API Keys
    GOOGLE_AI_API_KEY=your-gemini-api-key
    HF_TOKEN=your-huggingface-token
-   
+
    # GitHub (Optional - for higher rate limits)
    GITHUB_TOKEN=your-github-personal-access-token
    ```
 
 5. **Run the development server**
+
    ```bash
    npm run dev
    # or
@@ -196,25 +201,32 @@ src/
 ### Styling
 
 The application uses TailwindCSS with a custom design system. Modify theme colors in:
+
 - `src/app/globals.css` - CSS variables for light/dark mode
 - `tailwind.config.ts` - Tailwind configuration
+
+### Crow Integration
+
+This project includes Crow widget integration and MCP (Model Context Protocol) access to Crow documentation. For details on using the Crow MCP server to search Crow documentation, see [`docs/CROW_MCP_USAGE.md`](docs/CROW_MCP_USAGE.md).
 
 ### AI Model Configuration
 
 Adjust AI behavior in `src/lib/rag/query.ts`:
+
 ```typescript
-const MAX_CONTEXT_TOKENS = 16000;  // Maximum context size
-const MAX_RESPONSE_TOKENS = 2048;  // Maximum response length
-const CHUNK_SIZE = 2000;           // Text chunk size
-const CHUNK_OVERLAP = 400;         // Overlap between chunks
-const TOP_K_CHUNKS = 10;           // Number of chunks to retrieve
+const MAX_CONTEXT_TOKENS = 16000; // Maximum context size
+const MAX_RESPONSE_TOKENS = 2048; // Maximum response length
+const CHUNK_SIZE = 2000; // Text chunk size
+const CHUNK_OVERLAP = 400; // Overlap between chunks
+const TOP_K_CHUNKS = 10; // Number of chunks to retrieve
 ```
 
 ### Repository Limits
 
 Modify file fetching limits in `src/lib/rag/github.ts`:
+
 ```typescript
-const MAX_FILES = 50;  // Maximum files to analyze per repository
+const MAX_FILES = 50; // Maximum files to analyze per repository
 ```
 
 ## 📊 Database Schema
@@ -235,38 +247,40 @@ const MAX_FILES = 50;  // Maximum files to analyze per repository
 
 ## 🛠️ API Routes
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/auth/signup` | POST | Create new user account |
-| `/api/repositories` | GET | List user's repositories |
-| `/api/repositories` | POST | Add new repository |
-| `/api/repositories/[id]` | GET | Get repository details |
-| `/api/repositories/[id]` | DELETE | Delete repository |
-| `/api/chats` | POST | Create new chat |
-| `/api/chats/[repoId]` | GET | List repository chats |
-| `/api/messages` | POST | Send message & get AI response |
-| `/api/messages/[chatId]` | GET | Get chat messages |
-| `/api/health` | GET | Health check |
+| Endpoint                 | Method | Description                    |
+| ------------------------ | ------ | ------------------------------ |
+| `/api/auth/signup`       | POST   | Create new user account        |
+| `/api/repositories`      | GET    | List user's repositories       |
+| `/api/repositories`      | POST   | Add new repository             |
+| `/api/repositories/[id]` | GET    | Get repository details         |
+| `/api/repositories/[id]` | DELETE | Delete repository              |
+| `/api/chats`             | POST   | Create new chat                |
+| `/api/chats/[repoId]`    | GET    | List repository chats          |
+| `/api/messages`          | POST   | Send message & get AI response |
+| `/api/messages/[chatId]` | GET    | Get chat messages              |
+| `/api/health`            | GET    | Health check                   |
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
 **Repository stuck in "Analyzing..." state**
+
 - Check Supabase logs for embedding errors
 - Verify GOOGLE_AI_API_KEY and HF_TOKEN are set correctly
 - Ensure repository is public or GITHUB_TOKEN has access
 
 **Vector search returns no results**
+
 - Verify `match_embeddings` function exists in Supabase
 - Check if embeddings were successfully stored
 - Ensure embedding dimensions match (384)
 
 **Authentication errors**
+
 - Verify Supabase environment variables are correct
 - Check if Supabase Auth is enabled in your project
 - Ensure email confirmation is disabled or handled
-
 
 ## 🤝 Contributing
 

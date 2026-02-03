@@ -1,0 +1,125 @@
+openapi: 3.0.0
+info:
+  title: RepoChat AI API
+  description: |
+    API for RepoChat AI - enables Crow widget to perform secure Google OAuth sign-in.
+
+    **Google OAuth Sign-in**: Send `{ provider: "google", redirectTo?: string }` to get an OAuth URL. 
+    User visits the URL to complete sign-in securely without exposing credentials in chat.
+  version: 1.0.0
+
+servers:
+  - url: https://repo-chat-ai.vercel.app/api/auth/signin
+    description: Production
+
+paths:
+  /auth/signin:
+    post:
+      operationId: signInWithGoogleOAuth
+      summary: Sign in with Google OAuth
+      description: |
+        Initiate Google OAuth sign-in flow. Returns an OAuth URL that the user must visit to complete authentication.
+
+        **How it works:**
+        1. Call this endpoint with `{ "provider": "google" }`
+        2. Receive an `oauthUrl` in the response
+        3. User visits the `oauthUrl` to complete Google authentication
+        4. User is redirected back to your app and automatically signed in
+        5. Session cookies are set automatically by Supabase
+
+        **Security Benefits:**
+        - No credentials exposed in chat conversations
+        - Uses industry-standard OAuth 2.0 flow
+        - Secure session management handled by Supabase
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - provider
+              properties:
+                provider:
+                  type: string
+                  enum: [google]
+                  description: OAuth provider - must be "google"
+                  example: google
+                redirectTo:
+                  type: string
+                  format: uri
+                  description: |
+                    Optional. URL to redirect to after successful OAuth authentication.
+                    Defaults to `{origin}/dashboard` if not provided.
+                  example: https://your-domain.com/dashboard
+            examples:
+              googleOAuth:
+                summary: Google OAuth sign-in (default redirect)
+                value:
+                  provider: google
+              googleOAuthWithRedirect:
+                summary: Google OAuth with custom redirect URL
+                value:
+                  provider: google
+                  redirectTo: https://your-domain.com/dashboard
+      responses:
+        "200":
+          description: OAuth URL generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - oauthUrl
+                  - provider
+                  - message
+                  - instructions
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                    description: Indicates the request was successful
+                  oauthUrl:
+                    type: string
+                    format: uri
+                    description: |
+                      URL that the user must visit to complete Google OAuth sign-in.
+                      This URL will redirect to Google's authentication page, then back to your app.
+                    example: https://your-project.supabase.co/auth/v1/authorize?provider=google&redirect_to=https://your-domain.com/dashboard&api_key=...
+                  provider:
+                    type: string
+                    example: google
+                    description: The OAuth provider used
+                  message:
+                    type: string
+                    example: "Please visit the OAuth URL to complete sign-in"
+                    description: Human-readable message about the next step
+                  instructions:
+                    type: string
+                    example: "Click the oauthUrl link or copy it to your browser to complete Google sign-in"
+                    description: Instructions for the user on how to proceed
+        "400":
+          description: Bad request - missing or invalid provider
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid request. Provide { provider: 'google' }"
+        "500":
+          description: Server error - Supabase not configured or internal error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    examples:
+                      - "Supabase URL not configured"
+                      - "Internal server error during sign in"
